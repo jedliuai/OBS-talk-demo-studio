@@ -1,0 +1,118 @@
+diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
+index 255eba5..37f113b 100644
+--- a/src/zoominator-controller.cpp
++++ b/src/zoominator-controller.cpp
+@@ -2071,16 +2071,25 @@ void ZoominatorController::rebuildMarkerImage()
+ 		stroke.setAlpha(255);
+ 	stroke.setAlpha(255);
+ 
++	painter.setBrush(Qt::NoBrush);
++
+ 	const qreal thickness = std::clamp<qreal>((qreal)markerThickness, 1.0, std::max<qreal>(1.0, size / 2.0 - 2.0));
+-	const qreal margin = thickness * 0.5 + 1.5;
+-	const QRectF ringRect(margin, margin, size - margin * 2.0, size - margin * 2.0);
++	const auto drawRipple = [&](qreal insetRatio, int alpha, qreal widthRatio) {
++		QColor ripple = stroke;
++		ripple.setAlpha(alpha);
++		QPen pen(ripple);
++		pen.setWidthF(std::max<qreal>(1.0, thickness * widthRatio));
++		pen.setCosmetic(true);
++		painter.setPen(pen);
++		const qreal inset = size * insetRatio + pen.widthF() * 0.5;
++		painter.drawEllipse(QRectF(inset, inset, size - inset * 2.0, size - inset * 2.0));
++	};
+ 
+-	QPen ringPen(stroke);
+-	ringPen.setWidthF(thickness);
+-	ringPen.setCosmetic(true);
+-	painter.setPen(ringPen);
+-	painter.setBrush(Qt::NoBrush);
+-	painter.drawEllipse(ringRect);
++	// Three restrained concentric rings read as a soft water ripple once the
++	// scene item expands. The strongest ring stays nearest the click point.
++	drawRipple(0.04, 74, 0.72);
++	drawRipple(0.20, 132, 0.86);
++	drawRipple(0.35, 230, 1.0);
+ 	painter.end();
+ 
+ 	img.save(path, "PNG");
+@@ -2260,9 +2269,9 @@ bool ZoominatorController::captureMarkerClickPosition()
+ 		return false;
+ 
+ 	const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+-	static constexpr qint64 kMarkerFadeInMs = 110;
+-	static constexpr qint64 kMarkerHoldMs = 420;
+-	static constexpr qint64 kMarkerFadeOutMs = 220;
++	static constexpr qint64 kMarkerFadeInMs = 90;
++	static constexpr qint64 kMarkerHoldMs = 50;
++	static constexpr qint64 kMarkerFadeOutMs = 780;
+ 	{
+ 		std::lock_guard<std::mutex> lock(inputMutex);
+ 		markerClickX = mx;
+@@ -2287,7 +2296,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+ 	if (!showCursorMarker || !markerOnlyOnClick || !markerClickHasPos)
+ 		return 0;
+ 
+-	static constexpr qint64 kMarkerFadeInMs = 110;
++	static constexpr qint64 kMarkerFadeInMs = 90;
+ 	if (markerClickFlashFadeOutEndMs <= 0 || nowMs >= markerClickFlashFadeOutEndMs) {
+ 		std::lock_guard<std::mutex> lock(inputMutex);
+ 		markerClickHasPos = false;
+@@ -2312,7 +2321,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+ 	return (int)std::round((1.0 - smoothstep(tOut)) * 255.0);
+ }
+ 
+-void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255)
++double ZoominatorController::currentMarkerScale(qint64 nowMs) const
++{
++	if (markerClickFlashStartMs <= 0 || markerClickFlashFadeOutEndMs <= markerClickFlashStartMs)
++		return 1.0;
++
++	const double progress = clampd((double)(nowMs - markerClickFlashStartMs) /
++					       (double)(markerClickFlashFadeOutEndMs - markerClickFlashStartMs),
++				       0.0, 1.0);
++	const double easeOutCubic = 1.0 - std::pow(1.0 - progress, 3.0);
++	return 0.58 + easeOutCubic * 1.62;
++}
++
++void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255, double scale)
+ {
+ 	if (!showCursorMarker)
+ 		return;
+@@ -2334,6 +2355,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+ 		return;
+ 
+ 	normalize_marker_scene_item(item);
++	vec2 rippleScale{};
++	rippleScale.x = (float)std::clamp(scale, 0.1, 4.0);
++	rippleScale.y = rippleScale.x;
++	obs_sceneitem_set_scale(item, &rippleScale);
+ 
+ 	vec2 pos{};
+ 	pos.x = (float)x;
+@@ -2838,7 +2863,7 @@ void ZoominatorController::onTick()
+ 		if (obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr) {
+ 			const int opacity = currentMarkerOpacity(nowMs);
+ 			if (showCursorMarker && opacity > 0)
+-				updateMarkerPosition(scene, markerClickX, markerClickY, opacity);
++				updateMarkerPosition(scene, markerClickX, markerClickY, opacity, currentMarkerScale(nowMs));
+ 			else
+ 				hideMarkerInScene(scene);
+ 		}
+diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
+index 053750f..f8e742d 100644
+--- a/src/zoominator-controller.hpp
++++ b/src/zoominator-controller.hpp
+@@ -153,10 +153,11 @@ private:
+ 	void ensureMarkerFilter();
+ 	void applyMarkerOpacity(int opacity255);
+ 	void updateMarkerAppearance();
+-	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255);
++	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255, double scale);
+ 	bool captureMarkerClickPosition();
+ 	bool isMarkerFlashActive(qint64 nowMs) const;
+ 	int currentMarkerOpacity(qint64 nowMs);
++	double currentMarkerScale(qint64 nowMs) const;
+ 	void applyZoomToScene(double t);
+ 
+ 	/* Split loop. Frame-critical work runs on OBS's graphics thread via

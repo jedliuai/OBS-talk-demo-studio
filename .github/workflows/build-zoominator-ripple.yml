@@ -1,0 +1,42 @@
+name: Build Zoominator Ripple
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - plugin/zoominator-ripple.patch
+      - .github/workflows/build-zoominator-ripple.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Windows x64
+    runs-on: windows-2022
+    steps:
+      - name: Checkout studio repository
+        uses: actions/checkout@v4
+
+      - name: Fetch audited upstream source
+        shell: pwsh
+        run: git clone --depth 1 --branch 2.0.6 https://github.com/mmlTools/zoominator.git zoominator
+
+      - name: Apply gentle ripple patch
+        shell: pwsh
+        run: git -C zoominator apply "$env:GITHUB_WORKSPACE\plugin\zoominator-ripple.patch"
+
+      - name: Build Release plugin
+        shell: pwsh
+        run: .\zoominator\.github\scripts\Build-Windows.ps1 -Target x64 -Configuration Release
+
+      - name: Show build output
+        shell: pwsh
+        run: Get-ChildItem .\zoominator\release\Release -Recurse | Select-Object FullName, Length
+
+      - name: Upload reproducible plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: zoominator-ripple-2.0.6-windows-x64
+          path: zoominator/release/Release/**
+          if-no-files-found: error

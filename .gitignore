@@ -1,0 +1,17 @@
+# Local exports and machine-specific backups
+local-backups/
+*.local.json
+*.local.ini
+
+# Build output
+build/
+release/
+*.dll
+*.pdb
+*.zip
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
