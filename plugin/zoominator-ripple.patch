@@ -99,6 +99,20 @@ index 255eba5..37f113b 100644
  			else
  				hideMarkerInScene(scene);
  		}
+@@ -2893,10 +2918,11 @@ void ZoominatorController::onTick()
+ 		}
+ 
+ 		if (showCursorMarker && markerVisible) {
+-			const int opacity = currentMarkerOpacity(QDateTime::currentMSecsSinceEpoch());
++			const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
++			const int opacity = currentMarkerOpacity(nowMs);
+ 			if (opacity > 0)
+-				updateMarkerPosition(sc, markerX, markerY, opacity);
++				updateMarkerPosition(sc, markerX, markerY, opacity, currentMarkerScale(nowMs));
+ 			else
+ 				hideMarkerInScene(sc);
+ 		} else if (showCursorMarker) {
+ 			hideMarkerInScene(sc);
 diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
 index 053750f..f8e742d 100644
 --- a/src/zoominator-controller.hpp
