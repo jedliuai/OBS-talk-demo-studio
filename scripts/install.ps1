@@ -17,12 +17,19 @@ $backupRoot = Join-Path $obsRoot "OBS-talk-demo-studio-backups\$timestamp"
 $sceneSource = Join-Path $repoRoot 'obs\scene-collection\个人IP录制工作台.template.json'
 $profileSource = Join-Path $repoRoot 'obs\profile\basic.ini'
 $pluginSource = Join-Path $repoRoot 'obs\plugin-config\zoominator.json'
-$assetSource = Join-Path $repoRoot 'assets\jed-emerald-studio.png'
+$imageSource = Join-Path $repoRoot 'assets\jed-emerald-studio.png'
+$videoSource = Join-Path $repoRoot 'assets\jed-emerald-studio-loop.mp4'
+$maskSource = Join-Path $repoRoot 'assets\camera-circle-mask.png'
+$frameSource = Join-Path $repoRoot 'assets\camera-circle-frame.png'
 
 $sceneTarget = Join-Path $obsRoot 'basic\scenes\个人IP录制工作台.json'
 $profileTarget = Join-Path $obsRoot 'basic\profiles\个人IP录制_1440p30\basic.ini'
 $pluginTarget = Join-Path $obsRoot 'plugin_config\zoominator\zoominator.json'
-$assetTarget = Join-Path $obsRoot 'basic\assets\OBS-talk-demo-studio\jed-emerald-studio.png'
+$assetTargetRoot = Join-Path $obsRoot 'basic\assets\OBS-talk-demo-studio'
+$imageTarget = Join-Path $assetTargetRoot 'jed-emerald-studio.png'
+$videoTarget = Join-Path $assetTargetRoot 'jed-emerald-studio-loop.mp4'
+$maskTarget = Join-Path $assetTargetRoot 'camera-circle-mask.png'
+$frameTarget = Join-Path $assetTargetRoot 'camera-circle-frame.png'
 
 foreach ($target in @($sceneTarget, $profileTarget, $pluginTarget)) {
     if (Test-Path -LiteralPath $target) {
@@ -37,13 +44,21 @@ New-Item -ItemType Directory -Force -Path `
     (Split-Path -Parent $sceneTarget), `
     (Split-Path -Parent $profileTarget), `
     (Split-Path -Parent $pluginTarget), `
-    (Split-Path -Parent $assetTarget), `
+    $assetTargetRoot, `
     $RecordPath | Out-Null
 
-Copy-Item -LiteralPath $assetSource -Destination $assetTarget -Force
+Copy-Item -LiteralPath $imageSource -Destination $imageTarget -Force
+Copy-Item -LiteralPath $videoSource -Destination $videoTarget -Force
+Copy-Item -LiteralPath $maskSource -Destination $maskTarget -Force
+Copy-Item -LiteralPath $frameSource -Destination $frameTarget -Force
 
-$assetJsonPath = $assetTarget.Replace('\', '\\')
-$sceneText = [IO.File]::ReadAllText($sceneSource).Replace('{{ASSET_PATH}}', $assetJsonPath)
+$videoJsonPath = $videoTarget.Replace('\', '\\')
+$maskJsonPath = $maskTarget.Replace('\', '\\')
+$frameJsonPath = $frameTarget.Replace('\', '\\')
+$sceneText = [IO.File]::ReadAllText($sceneSource)
+$sceneText = $sceneText.Replace('{{VIDEO_ASSET_PATH}}', $videoJsonPath)
+$sceneText = $sceneText.Replace('{{MASK_ASSET_PATH}}', $maskJsonPath)
+$sceneText = $sceneText.Replace('{{FRAME_ASSET_PATH}}', $frameJsonPath)
 [IO.File]::WriteAllText($sceneTarget, $sceneText, [Text.UTF8Encoding]::new($false))
 
 $recordIniPath = $RecordPath.Replace('\', '\\')
@@ -59,4 +74,4 @@ Write-Host "录制目录：$RecordPath"
 if (Test-Path -LiteralPath $backupRoot) {
     Write-Host "原配置备份：$backupRoot"
 }
-Write-Host '重新打开 OBS 后，请选择自己的显示器、摄像头和麦克风。'
+Write-Host '重新打开 OBS 后，请选择自己的窗口、摄像头和麦克风。'

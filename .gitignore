@@ -6,6 +6,8 @@ local-backups/
 # Build output
 build/
 release/
+node_modules/
+motion-background/out/
 *.dll
 *.pdb
 *.zip
