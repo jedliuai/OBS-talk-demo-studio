@@ -73,6 +73,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
 重开 OBS 后，只需在来源属性里选择自己的显示器、Camo/iPhone 摄像头和麦克风。完整步骤见 [安装说明](docs/INSTALL.md)。
 
+可选：以管理员身份安装可复现构建的水波版 Zoominator：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
+```
+
 ## 柔和水波点击效果
 
 `plugin/zoominator-ripple.patch` 基于 [Zoominator 2.0.6](https://github.com/mmlTools/zoominator/tree/2.0.6) 制作：
@@ -81,6 +87,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 - 从 0.58x 缓出扩展到 2.20x；
 - 90ms 淡入、50ms 短暂停留、780ms 渐隐；
 - GitHub Actions 自动从官方源码应用补丁并构建 Windows x64 版本。
+
+发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 Release DLL 的 SHA256 为 `79126BBBB4D518DA3E228F9DDB90FF13B909343C843A8471E03010A13253CDC0`。
 
 这部分继承上游 GPL-2.0 许可。仓库不混入闭源二进制，构建过程可以逐行审计。
 

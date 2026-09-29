@@ -33,7 +33,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -RecordPath "D:\V
 
 ## 4. 安装水波版 Zoominator（可选）
 
-从本仓库 Actions 的 `Build Zoominator Ripple` 工作流下载 Windows x64 构建产物。将其中的 `zoominator.dll` 放入：
+推荐以管理员身份运行校验过发布包哈希的安装脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
+```
+
+如果 OBS 不在标准安装目录，可指定路径：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1 -ObsInstallRoot "D:\Program Files\obs-studio"
+```
+
+也可以从本仓库 Actions 的 `Build Zoominator Ripple` 工作流或 `v1.0.0` Release 手动下载 Windows x64 构建产物。将其中的 `zoominator.dll` 放入：
 
 ```text
 <OBS 安装目录>\obs-plugins\64bit\zoominator.dll
