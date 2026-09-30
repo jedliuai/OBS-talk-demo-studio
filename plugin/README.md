@@ -8,3 +8,5 @@
 - 许可：GPL-2.0
 
 补丁会按实际捕获窗口客户区和 OBS 场景变换矩阵校正坐标，把点击提示改为三层半透明水波，并加入 0.72x → 3.35x、约 1.3 秒的缓出扩散。它还会在 OBS 输出中叠加持续跟随的蓝白指针光环，但不会修改操作者的 Windows 系统光标。GitHub Actions 每次都从固定标签拉取官方源码、应用补丁并构建，以便审计和复现。
+
+补丁还注册了 `zoominator.toggle_zoom` 与 `zoominator.toggle_follow` 两个 OBS 内部动作，让悬浮控制条可以经本机 WebSocket 可靠触发缩放和跟随，不受 Windows 权限级别或模拟按键拦截影响。实体键盘上的 `Alt + Z` / `Alt + X` 仍然保留。

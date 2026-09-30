@@ -10,7 +10,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-control-bar.ps1
 
 窗口启用了 Windows `WDA_EXCLUDEFROMCAPTURE`，因此不会进入 OBS 的窗口捕获或 Windows 图形屏幕捕获。它仍会真实显示在操作者屏幕上；某些较老的第三方截图驱动如果不遵守 Windows 捕获排除标记，使用前需要自行试录确认。
 
-控制条只是触发同一套快捷键，不会保存 OBS WebSocket 密码，也不依赖网络：
+控制条通过本机 OBS WebSocket 直接执行场景、缩放、跟随和录制动作，不再依赖容易被 Windows 或应用拦截的模拟按键。它只读取 OBS 自己保存在本机的连接配置，不会把密码复制到仓库，也不会连接外网。右侧状态会显示“已执行”或“连接失败”：
 
 ```text
 Alt + 1  真人全屏
