@@ -4,8 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$releaseUrl = 'https://github.com/jedliuai/OBS-talk-demo-studio/releases/download/v1.0.0/zoominator-ripple-2.0.6-windows-x64.zip'
-$expectedSha256 = '77A67E67D771342F1B5F5EE1384970C0B8F3C3F6A01EC1F901DFC79AFA91275F'
+$releaseUrl = 'https://github.com/jedliuai/OBS-talk-demo-studio/releases/download/v1.4.0/zoominator-ripple-2.0.6-windows-x64.zip'
+$expectedSha256 = 'F84FB6848494C48929E260EEEA76BE1DB0B3D08065EC0D4B4A93EAA4A3F0D14C'
 
 if (Get-Process -Name 'obs64' -ErrorAction SilentlyContinue) {
     throw 'OBS 正在运行。请先退出 OBS，再安装插件。'
