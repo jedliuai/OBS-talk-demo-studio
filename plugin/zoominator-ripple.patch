@@ -1,5 +1,5 @@
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..15544ca 100644
+index 255eba5..c54133e 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
 @@ -2,6 +2,8 @@
@@ -76,7 +76,7 @@ index 255eba5..15544ca 100644
  	uninstallHooks();
  	ensureTicking(false);
  
-@@ -617,6 +645,20 @@ void ZoominatorController::shutdown()
+@@ -617,6 +645,23 @@ void ZoominatorController::shutdown()
  		dialog->close();
  }
  
@@ -84,20 +84,23 @@ index 255eba5..15544ca 100644
 +{
 +	if (!pressed || !data)
 +		return;
-+	static_cast<ZoominatorController *>(data)->onTriggerDown();
++	auto *controller = static_cast<ZoominatorController *>(data);
++	QMetaObject::invokeMethod(controller, [controller]() { controller->onTriggerDown(); }, Qt::QueuedConnection);
 +}
 +
 +void ZoominatorController::obsFollowToggleHotkey(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
 +{
 +	if (!pressed || !data)
 +		return;
-+	static_cast<ZoominatorController *>(data)->toggleFollowMouseRuntime();
++	auto *controller = static_cast<ZoominatorController *>(data);
++	QMetaObject::invokeMethod(controller, [controller]() { controller->toggleFollowMouseRuntime(); },
++				  Qt::QueuedConnection);
 +}
 +
  void ZoominatorController::showDialog()
  {
  	if (!dialog) {
-@@ -1022,6 +1064,7 @@ void ZoominatorController::startZoomOut()
+@@ -1022,6 +1067,7 @@ void ZoominatorController::startZoomOut()
  		markerClickFlashHoldUntilMs = 0;
  		markerClickFlashFadeOutEndMs = 0;
  		markerClickHasPos = false;
@@ -105,7 +108,7 @@ index 255eba5..15544ca 100644
  	}
  	ensureTicking(true);
  }
-@@ -1436,6 +1479,56 @@ static std::wstring to_w(const QString &s)
+@@ -1436,6 +1482,56 @@ static std::wstring to_w(const QString &s)
  	return s.toStdWString();
  }
  
@@ -162,7 +165,7 @@ index 255eba5..15544ca 100644
  static bool get_process_exe_name(DWORD pid, QString &out)
  {
  	out.clear();
-@@ -1516,6 +1609,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1516,6 +1612,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  		return false;
  	const char *w = obs_data_get_string(s, "window");
  	QString sel = (w && *w) ? QString::fromUtf8(w) : QString();
@@ -170,7 +173,7 @@ index 255eba5..15544ca 100644
  	obs_data_release(s);
  
  	if (sel.isEmpty())
-@@ -1530,12 +1624,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1530,12 +1627,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  	ctx.wantExe = exe;
  
  	EnumWindows(enum_windows_cb, reinterpret_cast<LPARAM>(&ctx));
@@ -201,7 +204,7 @@ index 255eba5..15544ca 100644
  
  	rcOut = rc;
  	return true;
-@@ -1935,13 +2046,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
+@@ -1935,13 +2049,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
  }
  #endif
  
@@ -309,7 +312,7 @@ index 255eba5..15544ca 100644
  	int rx = 0, ry = 0, rw = 0, rh = 0;
  	if (!getSelectedScreenRect(rx, ry, rw, rh) || rw <= 0 || rh <= 0)
  		return false;
-@@ -2049,6 +2253,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
+@@ -2049,6 +2256,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
  	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
  }
  
@@ -449,7 +452,7 @@ index 255eba5..15544ca 100644
  void ZoominatorController::rebuildMarkerImage()
  {
  	const int size = std::clamp(markerSize, 6, 512);
-@@ -2071,16 +2408,25 @@ void ZoominatorController::rebuildMarkerImage()
+@@ -2071,16 +2411,25 @@ void ZoominatorController::rebuildMarkerImage()
  		stroke.setAlpha(255);
  	stroke.setAlpha(255);
  
@@ -483,7 +486,7 @@ index 255eba5..15544ca 100644
  	painter.end();
  
  	img.save(path, "PNG");
-@@ -2253,29 +2599,63 @@ bool ZoominatorController::captureMarkerClickPosition()
+@@ -2253,29 +2602,63 @@ bool ZoominatorController::captureMarkerClickPosition()
  		return false;
  
  	int cx = 0, cy = 0;
@@ -562,7 +565,7 @@ index 255eba5..15544ca 100644
  bool ZoominatorController::isMarkerFlashActive(qint64 nowMs) const
  {
  	return showCursorMarker && markerOnlyOnClick && markerClickHasPos && markerClickFlashFadeOutEndMs > 0 &&
-@@ -2287,7 +2667,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2287,7 +2670,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	if (!showCursorMarker || !markerOnlyOnClick || !markerClickHasPos)
  		return 0;
  
@@ -571,7 +574,7 @@ index 255eba5..15544ca 100644
  	if (markerClickFlashFadeOutEndMs <= 0 || nowMs >= markerClickFlashFadeOutEndMs) {
  		std::lock_guard<std::mutex> lock(inputMutex);
  		markerClickHasPos = false;
-@@ -2312,7 +2692,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2312,7 +2695,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	return (int)std::round((1.0 - smoothstep(tOut)) * 255.0);
  }
  
@@ -592,7 +595,7 @@ index 255eba5..15544ca 100644
  {
  	if (!showCursorMarker)
  		return;
-@@ -2334,6 +2726,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+@@ -2334,6 +2729,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
  		return;
  
  	normalize_marker_scene_item(item);
@@ -603,7 +606,7 @@ index 255eba5..15544ca 100644
  
  	vec2 pos{};
  	pos.x = (float)x;
-@@ -2353,6 +2749,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
+@@ -2353,6 +2752,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
  	OrigState orig = readSceneItemTransform(item);
  	if (!orig.valid)
  		return;
@@ -611,7 +614,7 @@ index 255eba5..15544ca 100644
  
  	float renderedW = 0.0f;
  	float renderedH = 0.0f;
-@@ -2813,8 +3210,10 @@ void ZoominatorController::onTick()
+@@ -2813,8 +3213,10 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -623,7 +626,7 @@ index 255eba5..15544ca 100644
  		ensureTicking(false);
  		return;
  	}
-@@ -2828,17 +3227,26 @@ void ZoominatorController::onTick()
+@@ -2828,17 +3230,26 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -655,7 +658,7 @@ index 255eba5..15544ca 100644
  			else
  				hideMarkerInScene(scene);
  		}
-@@ -2850,7 +3258,8 @@ void ZoominatorController::onTick()
+@@ -2850,7 +3261,8 @@ void ZoominatorController::onTick()
  			markerClickFlashStartMs = 0;
  			markerClickFlashHoldUntilMs = 0;
  			markerClickFlashFadeOutEndMs = 0;
@@ -665,7 +668,7 @@ index 255eba5..15544ca 100644
  		}
  		return;
  	}
-@@ -2862,8 +3271,8 @@ void ZoominatorController::onTick()
+@@ -2862,8 +3274,8 @@ void ZoominatorController::onTick()
  			if (debug)
  				blog(LOG_WARNING, "[Zoominator] No movable scene items in current scene.");
  			tickingWanted.store(false, std::memory_order_release);
@@ -675,7 +678,7 @@ index 255eba5..15544ca 100644
  			return;
  		}
  
-@@ -2877,10 +3286,21 @@ void ZoominatorController::onTick()
+@@ -2877,10 +3289,21 @@ void ZoominatorController::onTick()
  	}
  
  	obs_source_t *sceneSource = obs_frontend_get_current_scene();
@@ -697,7 +700,7 @@ index 255eba5..15544ca 100644
  		bool markerVisible = false;
  		double markerX = 0.0, markerY = 0.0;
  		{
-@@ -2891,9 +3311,10 @@ void ZoominatorController::onTick()
+@@ -2891,9 +3314,10 @@ void ZoominatorController::onTick()
  		}
  
  		if (showCursorMarker && markerVisible) {
@@ -710,7 +713,7 @@ index 255eba5..15544ca 100644
  			else
  				hideMarkerInScene(sc);
  		} else if (showCursorMarker) {
-@@ -2901,10 +3322,9 @@ void ZoominatorController::onTick()
+@@ -2901,10 +3325,9 @@ void ZoominatorController::onTick()
  		}
  	}
  
@@ -722,7 +725,7 @@ index 255eba5..15544ca 100644
  
  	obs_source_t *previousRef = nullptr;
  	{
-@@ -2984,8 +3404,8 @@ void ZoominatorController::finishZoomOnMainThread()
+@@ -2984,8 +3407,8 @@ void ZoominatorController::finishZoomOnMainThread()
  	restoringRecovery = false;
  	clearRecoveryActive();
  	tickingWanted.store(false, std::memory_order_release);
@@ -732,7 +735,7 @@ index 255eba5..15544ca 100644
  
  	obs_source_t *staleRef = nullptr;
  	{
-@@ -3283,7 +3703,10 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
+@@ -3283,7 +3706,10 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
  		}
  
  		if (down)
