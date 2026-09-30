@@ -1,5 +1,5 @@
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..ffb1211 100644
+index 255eba5..2cdc132 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
 @@ -2,6 +2,8 @@
@@ -61,7 +61,64 @@ index 255eba5..ffb1211 100644
  	}
  	ensureTicking(true);
  }
-@@ -1516,6 +1533,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1436,6 +1453,56 @@ static std::wstring to_w(const QString &s)
+ 	return s.toStdWString();
+ }
+ 
++static bool qt_screen_mapping_for_monitor(HMONITOR monitor, RECT &nativeMonitor, QRect &logicalMonitor, double &dpr)
++{
++	MONITORINFOEXW info{};
++	info.cbSize = sizeof(info);
++	if (!monitor || !GetMonitorInfoW(monitor, &info))
++		return false;
++
++	QScreen *match = nullptr;
++	const QString deviceName = QString::fromWCharArray(info.szDevice);
++	for (auto *screen : QGuiApplication::screens()) {
++		if (screen && screen->name().compare(deviceName, Qt::CaseInsensitive) == 0) {
++			match = screen;
++			break;
++		}
++	}
++	if (!match && QGuiApplication::screens().size() == 1)
++		match = QGuiApplication::primaryScreen();
++	if (!match)
++		return false;
++
++	nativeMonitor = info.rcMonitor;
++	logicalMonitor = match->geometry();
++	dpr = std::max(0.1, (double)match->devicePixelRatio());
++	return true;
++}
++
++static RECT native_rect_to_qt_logical(const RECT &nativeRect)
++{
++	RECT nativeMonitor{};
++	QRect logicalMonitor;
++	double dpr = 1.0;
++	RECT out = nativeRect;
++	HMONITOR monitor = MonitorFromRect(&nativeRect, MONITOR_DEFAULTTONEAREST);
++	if (!qt_screen_mapping_for_monitor(monitor, nativeMonitor, logicalMonitor, dpr))
++		return out;
++
++	out.left = logicalMonitor.left() + (LONG)std::lround((nativeRect.left - nativeMonitor.left) / dpr);
++	out.top = logicalMonitor.top() + (LONG)std::lround((nativeRect.top - nativeMonitor.top) / dpr);
++	out.right = logicalMonitor.left() + (LONG)std::lround((nativeRect.right - nativeMonitor.left) / dpr);
++	out.bottom = logicalMonitor.top() + (LONG)std::lround((nativeRect.bottom - nativeMonitor.top) / dpr);
++	return out;
++}
++
++static POINT native_point_to_qt_logical(const POINT &nativePoint)
++{
++	RECT pointRect{nativePoint.x, nativePoint.y, nativePoint.x + 1, nativePoint.y + 1};
++	const RECT mapped = native_rect_to_qt_logical(pointRect);
++	return POINT{mapped.left, mapped.top};
++}
++
+ static bool get_process_exe_name(DWORD pid, QString &out)
+ {
+ 	out.clear();
+@@ -1516,6 +1583,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  		return false;
  	const char *w = obs_data_get_string(s, "window");
  	QString sel = (w && *w) ? QString::fromUtf8(w) : QString();
@@ -69,7 +126,18 @@ index 255eba5..ffb1211 100644
  	obs_data_release(s);
  
  	if (sel.isEmpty())
-@@ -1534,8 +1552,18 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1530,12 +1598,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+ 	ctx.wantExe = exe;
+ 
+ 	EnumWindows(enum_windows_cb, reinterpret_cast<LPARAM>(&ctx));
++	if (!ctx.found && !ctx.wantTitle.isEmpty() && (!ctx.wantClass.isEmpty() || !ctx.wantExe.isEmpty())) {
++		/* Browser titles change with the active tab and tab count. OBS can keep
++		 * capturing the same executable/class, so use those stable identifiers
++		 * as a second pass instead of falling back to whole-monitor coordinates. */
++		ctx.wantTitle.clear();
++		EnumWindows(enum_windows_cb, reinterpret_cast<LPARAM>(&ctx));
++	}
+ 	if (!ctx.found)
  		return false;
  
  	RECT rc{};
@@ -89,7 +157,7 @@ index 255eba5..ffb1211 100644
  
  	rcOut = rc;
  	return true;
-@@ -1935,13 +1963,103 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
+@@ -1935,13 +2020,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
  }
  #endif
  
@@ -102,6 +170,7 @@ index 255eba5..ffb1211 100644
 +	RECT rc{};
 +	if (!match_window_rect_for_source(src, rc) && !match_monitor_rect(src, rc))
 +		return false;
++	rc = native_rect_to_qt_logical(rc);
 +	x = rc.left;
 +	y = rc.top;
 +	w = rc.right - rc.left;
@@ -143,6 +212,8 @@ index 255eba5..ffb1211 100644
 +	 * also preserves OBS bounds fitting, letterboxing, crop and rotation. */
 +	std::vector<obs_sceneitem_t *> items;
 +	enumerateTargetItemsInCurrentScene(items);
++	if (items.empty() && !includedSources.isEmpty())
++		return false;
 +	bool sawCaptureRect = false;
 +	for (auto *item : items) {
 +		if (!item || !obs_sceneitem_visible(item))
@@ -194,7 +265,7 @@ index 255eba5..ffb1211 100644
  	int rx = 0, ry = 0, rw = 0, rh = 0;
  	if (!getSelectedScreenRect(rx, ry, rw, rh) || rw <= 0 || rh <= 0)
  		return false;
-@@ -2049,6 +2167,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
+@@ -2049,6 +2227,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
  	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
  }
  
@@ -334,7 +405,7 @@ index 255eba5..ffb1211 100644
  void ZoominatorController::rebuildMarkerImage()
  {
  	const int size = std::clamp(markerSize, 6, 512);
-@@ -2071,16 +2322,25 @@ void ZoominatorController::rebuildMarkerImage()
+@@ -2071,16 +2382,25 @@ void ZoominatorController::rebuildMarkerImage()
  		stroke.setAlpha(255);
  	stroke.setAlpha(255);
  
@@ -368,7 +439,7 @@ index 255eba5..ffb1211 100644
  	painter.end();
  
  	img.save(path, "PNG");
-@@ -2253,29 +2513,63 @@ bool ZoominatorController::captureMarkerClickPosition()
+@@ -2253,29 +2573,63 @@ bool ZoominatorController::captureMarkerClickPosition()
  		return false;
  
  	int cx = 0, cy = 0;
@@ -447,7 +518,7 @@ index 255eba5..ffb1211 100644
  bool ZoominatorController::isMarkerFlashActive(qint64 nowMs) const
  {
  	return showCursorMarker && markerOnlyOnClick && markerClickHasPos && markerClickFlashFadeOutEndMs > 0 &&
-@@ -2287,7 +2581,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2287,7 +2641,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	if (!showCursorMarker || !markerOnlyOnClick || !markerClickHasPos)
  		return 0;
  
@@ -456,7 +527,7 @@ index 255eba5..ffb1211 100644
  	if (markerClickFlashFadeOutEndMs <= 0 || nowMs >= markerClickFlashFadeOutEndMs) {
  		std::lock_guard<std::mutex> lock(inputMutex);
  		markerClickHasPos = false;
-@@ -2312,7 +2606,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2312,7 +2666,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	return (int)std::round((1.0 - smoothstep(tOut)) * 255.0);
  }
  
@@ -477,7 +548,7 @@ index 255eba5..ffb1211 100644
  {
  	if (!showCursorMarker)
  		return;
-@@ -2334,6 +2640,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+@@ -2334,6 +2700,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
  		return;
  
  	normalize_marker_scene_item(item);
@@ -488,7 +559,7 @@ index 255eba5..ffb1211 100644
  
  	vec2 pos{};
  	pos.x = (float)x;
-@@ -2353,6 +2663,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
+@@ -2353,6 +2723,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
  	OrigState orig = readSceneItemTransform(item);
  	if (!orig.valid)
  		return;
@@ -496,7 +567,7 @@ index 255eba5..ffb1211 100644
  
  	float renderedW = 0.0f;
  	float renderedH = 0.0f;
-@@ -2813,8 +3124,10 @@ void ZoominatorController::onTick()
+@@ -2813,8 +3184,10 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -508,7 +579,7 @@ index 255eba5..ffb1211 100644
  		ensureTicking(false);
  		return;
  	}
-@@ -2828,17 +3141,26 @@ void ZoominatorController::onTick()
+@@ -2828,17 +3201,26 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -540,7 +611,7 @@ index 255eba5..ffb1211 100644
  			else
  				hideMarkerInScene(scene);
  		}
-@@ -2850,7 +3172,8 @@ void ZoominatorController::onTick()
+@@ -2850,7 +3232,8 @@ void ZoominatorController::onTick()
  			markerClickFlashStartMs = 0;
  			markerClickFlashHoldUntilMs = 0;
  			markerClickFlashFadeOutEndMs = 0;
@@ -550,7 +621,7 @@ index 255eba5..ffb1211 100644
  		}
  		return;
  	}
-@@ -2862,8 +3185,8 @@ void ZoominatorController::onTick()
+@@ -2862,8 +3245,8 @@ void ZoominatorController::onTick()
  			if (debug)
  				blog(LOG_WARNING, "[Zoominator] No movable scene items in current scene.");
  			tickingWanted.store(false, std::memory_order_release);
@@ -560,7 +631,7 @@ index 255eba5..ffb1211 100644
  			return;
  		}
  
-@@ -2877,10 +3200,21 @@ void ZoominatorController::onTick()
+@@ -2877,10 +3260,21 @@ void ZoominatorController::onTick()
  	}
  
  	obs_source_t *sceneSource = obs_frontend_get_current_scene();
@@ -582,7 +653,7 @@ index 255eba5..ffb1211 100644
  		bool markerVisible = false;
  		double markerX = 0.0, markerY = 0.0;
  		{
-@@ -2891,9 +3225,10 @@ void ZoominatorController::onTick()
+@@ -2891,9 +3285,10 @@ void ZoominatorController::onTick()
  		}
  
  		if (showCursorMarker && markerVisible) {
@@ -595,7 +666,7 @@ index 255eba5..ffb1211 100644
  			else
  				hideMarkerInScene(sc);
  		} else if (showCursorMarker) {
-@@ -2901,10 +3236,9 @@ void ZoominatorController::onTick()
+@@ -2901,10 +3296,9 @@ void ZoominatorController::onTick()
  		}
  	}
  
@@ -607,7 +678,7 @@ index 255eba5..ffb1211 100644
  
  	obs_source_t *previousRef = nullptr;
  	{
-@@ -2984,8 +3318,8 @@ void ZoominatorController::finishZoomOnMainThread()
+@@ -2984,8 +3378,8 @@ void ZoominatorController::finishZoomOnMainThread()
  	restoringRecovery = false;
  	clearRecoveryActive();
  	tickingWanted.store(false, std::memory_order_release);
@@ -617,12 +688,15 @@ index 255eba5..ffb1211 100644
  
  	obs_source_t *staleRef = nullptr;
  	{
-@@ -3283,7 +3617,7 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
+@@ -3283,7 +3677,10 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
  		}
  
  		if (down)
 -			g_ctl->captureMarkerClickPosition();
-+			g_ctl->captureMarkerClickPosition((int)m->pt.x, (int)m->pt.y);
++		{
++			const POINT logicalPoint = native_point_to_qt_logical(m->pt);
++			g_ctl->captureMarkerClickPosition((int)logicalPoint.x, (int)logicalPoint.y);
++		}
  
  		if (g_ctl->triggerType == "mouse" && (down || up)) {
  			if (mods_current(g_ctl->modCtrl, g_ctl->modAlt, g_ctl->modShift, g_ctl->modWin,
