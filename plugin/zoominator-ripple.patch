@@ -627,10 +627,18 @@ index 255eba5..ffb1211 100644
  		if (g_ctl->triggerType == "mouse" && (down || up)) {
  			if (mods_current(g_ctl->modCtrl, g_ctl->modAlt, g_ctl->modShift, g_ctl->modWin,
 diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
-index 053750f..ef2de9f 100644
+index 053750f..6c90ca3 100644
 --- a/src/zoominator-controller.hpp
 +++ b/src/zoominator-controller.hpp
-@@ -138,7 +138,8 @@ private:
+@@ -2,6 +2,7 @@
+ 
+ #include <obs-module.h>
+ #include <obs-frontend-api.h>
++#include <graphics/matrix4.h>
+ 
+ #include <QObject>
+ #include <QPointer>
+@@ -138,7 +139,8 @@ private:
  	void enumerateTargetItemsInCurrentScene(std::vector<obs_sceneitem_t *> &items) const;
  
  	bool getCursorPos(int &x, int &y) const;
@@ -640,7 +648,7 @@ index 053750f..ef2de9f 100644
  
  	void captureOriginal(obs_sceneitem_t *item);
  	void restoreOriginal(obs_sceneitem_t *item);
-@@ -146,17 +147,26 @@ private:
+@@ -146,17 +148,26 @@ private:
  	void restoreOriginalSceneItems(const std::vector<obs_sceneitem_t *> &items);
  	void restoreOriginalSceneItemsFromState();
  	QString markerImagePath() const;
@@ -668,7 +676,7 @@ index 053750f..ef2de9f 100644
  	void applyZoomToScene(double t);
  
  	/* Split loop. Frame-critical work runs on OBS's graphics thread via
-@@ -226,6 +236,10 @@ private:
+@@ -226,6 +237,10 @@ private:
  	float targetY = 0.0f;
  
  	bool markerClickHasPos = false;
@@ -679,7 +687,7 @@ index 053750f..ef2de9f 100644
  	float markerClickX = 0.0f;
  	float markerClickY = 0.0f;
  	uint32_t markerAppearanceHash = 0;
-@@ -247,6 +261,7 @@ private:
+@@ -247,6 +262,7 @@ private:
  		obs_sceneitem_crop crop{};
  		vec2 effectivePos{};
  		vec2 effectiveScale{};
@@ -687,7 +695,7 @@ index 053750f..ef2de9f 100644
  	};
  
  	struct SceneItemState {
-@@ -282,6 +297,7 @@ private:
+@@ -282,6 +298,7 @@ private:
  
  	QPointer<ZoominatorDialog> dialog;
  	obs_source_t *markerSource = nullptr;
