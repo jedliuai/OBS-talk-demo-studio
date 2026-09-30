@@ -17,19 +17,19 @@ $backupRoot = Join-Path $obsRoot "OBS-talk-demo-studio-backups\$timestamp"
 $sceneSource = Join-Path $repoRoot 'obs\scene-collection\个人IP录制工作台.template.json'
 $profileSource = Join-Path $repoRoot 'obs\profile\basic.ini'
 $pluginSource = Join-Path $repoRoot 'obs\plugin-config\zoominator.json'
-$imageSource = Join-Path $repoRoot 'assets\jed-emerald-studio.png'
-$videoSource = Join-Path $repoRoot 'assets\jed-emerald-studio-loop.mp4'
+$imageSource = Join-Path $repoRoot 'assets\jed-midnight-studio.png'
+$videoSource = Join-Path $repoRoot 'assets\jed-midnight-studio-loop.mp4'
 $maskSource = Join-Path $repoRoot 'assets\camera-circle-mask.png'
-$frameSource = Join-Path $repoRoot 'assets\camera-circle-frame.png'
+$frameSource = Join-Path $repoRoot 'assets\camera-circle-frame-midnight.png'
 
 $sceneTarget = Join-Path $obsRoot 'basic\scenes\个人IP录制工作台.json'
 $profileTarget = Join-Path $obsRoot 'basic\profiles\个人IP录制_1440p30\basic.ini'
 $pluginTarget = Join-Path $obsRoot 'plugin_config\zoominator\zoominator.json'
 $assetTargetRoot = Join-Path $obsRoot 'basic\assets\OBS-talk-demo-studio'
-$imageTarget = Join-Path $assetTargetRoot 'jed-emerald-studio.png'
-$videoTarget = Join-Path $assetTargetRoot 'jed-emerald-studio-loop.mp4'
+$imageTarget = Join-Path $assetTargetRoot 'jed-midnight-studio.png'
+$videoTarget = Join-Path $assetTargetRoot 'jed-midnight-studio-loop.mp4'
 $maskTarget = Join-Path $assetTargetRoot 'camera-circle-mask.png'
-$frameTarget = Join-Path $assetTargetRoot 'camera-circle-frame.png'
+$frameTarget = Join-Path $assetTargetRoot 'camera-circle-frame-midnight.png'
 
 foreach ($target in @($sceneTarget, $profileTarget, $pluginTarget)) {
     if (Test-Path -LiteralPath $target) {
