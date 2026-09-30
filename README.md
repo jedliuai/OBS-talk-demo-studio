@@ -97,7 +97,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
 - 在 OBS 画面内加入持续跟随的蓝白指针光环，不改动本机系统光标；
 - GitHub Actions 自动从官方源码应用补丁并构建 Windows x64 版本。
 
-发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 v1.4.0 Release DLL 的 SHA256 为 `A7B362D154D9BF21D5BD52A31899BEE3CE06D173B52CDBD671B5F62C1EB29A1A`。
+发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 v1.4.1 Release DLL 的 SHA256 为 `EF83A2BFAA1CBD9B9609A9FC0A908A6DF7F3A08A278CD1A0E2024E5FEDBCE804`。
 
 这部分继承上游 GPL-2.0 许可。仓库不混入闭源二进制，构建过程可以逐行审计。
 
