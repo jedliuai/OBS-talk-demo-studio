@@ -1,8 +1,340 @@
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..37f113b 100644
+index 255eba5..ffb1211 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
-@@ -2071,16 +2071,25 @@ void ZoominatorController::rebuildMarkerImage()
+@@ -2,6 +2,8 @@
+ 
+ #include <obs-frontend-api.h>
+ #include <obs.h>
++#include <graphics/matrix4.h>
++#include <graphics/vec3.h>
+ #include <util/platform.h>
+ 
+ #include <QGuiApplication>
+@@ -63,6 +65,7 @@ static int qtKeyToVk(int qtKey);
+ 
+ static constexpr const char *kZoominatorMarkerSourceName = "Zoominator Cursor Marker";
+ static constexpr const char *kZoominatorMarkerSourceId = "zoominator_marker_source";
++static constexpr const char *kZoominatorEnhancedCursorSourceName = "Zoominator Enhanced Cursor";
+ static void cleanup_legacy_marker_items_all_scenes(obs_source_t *currentMarkerSource = nullptr);
+ static bool source_name_starts_with(const char *name, const char *prefix);
+ static void collect_live_scene_items(obs_scene_t *scene, std::vector<obs_sceneitem_t *> &items);
+@@ -266,6 +269,7 @@ ZoominatorController::ZoominatorController()
+ ZoominatorController::~ZoominatorController()
+ {
+ 	markerSource = nullptr;
++	enhancedCursorSource = nullptr;
+ }
+ 
+ QString ZoominatorController::configPath() const
+@@ -288,6 +292,16 @@ QString ZoominatorController::markerImagePath() const
+ 	return p;
+ }
+ 
++QString ZoominatorController::enhancedCursorImagePath() const
++{
++	char *path = obs_module_config_path("zoominator-enhanced-cursor.png");
++	if (!path)
++		return {};
++	QString p = QString::fromUtf8(path);
++	bfree(path);
++	return p;
++}
++
+ QString ZoominatorController::sceneItemKey(obs_sceneitem_t *item) const
+ {
+ 	if (!item)
+@@ -585,6 +599,8 @@ void ZoominatorController::initialize()
+ 	obs_add_tick_callback(videoTickCallback, this);
+ 	tickCallbackAdded = true;
+ 	QTimer::singleShot(1500, this, [this]() { installHooks(); });
++	if (showCursorMarker && showMarkerWhenNotZoomed)
++		QTimer::singleShot(1600, this, [this]() { ensureTicking(true); });
+ 	QTimer::singleShot(3000, this, [this]() { requestRecoveryRestore(); });
+ 	QTimer::singleShot(5000, this, [this]() { cleanup_legacy_marker_items_all_scenes(markerSource); });
+ }
+@@ -1022,6 +1038,7 @@ void ZoominatorController::startZoomOut()
+ 		markerClickFlashHoldUntilMs = 0;
+ 		markerClickFlashFadeOutEndMs = 0;
+ 		markerClickHasPos = false;
++		markerClickPending = false;
+ 	}
+ 	ensureTicking(true);
+ }
+@@ -1516,6 +1533,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+ 		return false;
+ 	const char *w = obs_data_get_string(s, "window");
+ 	QString sel = (w && *w) ? QString::fromUtf8(w) : QString();
++	const bool clientArea = obs_data_get_bool(s, "client_area");
+ 	obs_data_release(s);
+ 
+ 	if (sel.isEmpty())
+@@ -1534,8 +1552,18 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+ 		return false;
+ 
+ 	RECT rc{};
+-	if (!GetWindowRect(ctx.found, &rc))
++	if (clientArea) {
++		RECT client{};
++		POINT topLeft{};
++		if (!GetClientRect(ctx.found, &client) || !ClientToScreen(ctx.found, &topLeft))
++			return false;
++		rc.left = topLeft.x;
++		rc.top = topLeft.y;
++		rc.right = topLeft.x + (client.right - client.left);
++		rc.bottom = topLeft.y + (client.bottom - client.top);
++	} else if (!GetWindowRect(ctx.found, &rc)) {
+ 		return false;
++	}
+ 
+ 	rcOut = rc;
+ 	return true;
+@@ -1935,13 +1963,103 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
+ }
+ #endif
+ 
++static bool match_capture_rect_for_source(obs_source_t *src, int &x, int &y, int &w, int &h)
++{
++	if (!src)
++		return false;
++
++#ifdef _WIN32
++	RECT rc{};
++	if (!match_window_rect_for_source(src, rc) && !match_monitor_rect(src, rc))
++		return false;
++	x = rc.left;
++	y = rc.top;
++	w = rc.right - rc.left;
++	h = rc.bottom - rc.top;
++#elif defined(__APPLE__)
++	CGRect rc{};
++	if (!match_window_rect_for_source(src, rc) && !match_monitor_rect(src, rc))
++		return false;
++	x = (int)std::lround(rc.origin.x);
++	y = (int)std::lround(rc.origin.y);
++	w = (int)std::lround(rc.size.width);
++	h = (int)std::lround(rc.size.height);
++#elif defined(__linux__)
++	LinuxRect rc{};
++	if (!match_window_rect_for_source(src, rc) && !match_monitor_rect(src, rc))
++		return false;
++	x = rc.x;
++	y = rc.y;
++	w = rc.w;
++	h = rc.h;
++#else
++	return false;
++#endif
++
++	return w > 0 && h > 0;
++}
++
+ bool ZoominatorController::mapCursorToScenePixels(int cursorX, int cursorY, float &sx, float &sy,
+-						  bool &cursorInside) const
++						  bool &cursorInside, bool useCurrentTransform) const
+ {
+ 	cursorInside = false;
+ 	sx = 0.f;
+ 	sy = 0.f;
+ 
++	/* Prefer the capture source itself over the selected monitor. Window capture
++	 * can occupy only part of a display, and its client area can exclude the
++	 * title bar and borders. Mapping through the scene item's draw transform
++	 * also preserves OBS bounds fitting, letterboxing, crop and rotation. */
++	std::vector<obs_sceneitem_t *> items;
++	enumerateTargetItemsInCurrentScene(items);
++	bool sawCaptureRect = false;
++	for (auto *item : items) {
++		if (!item || !obs_sceneitem_visible(item))
++			continue;
++
++		obs_source_t *src = obs_sceneitem_get_source(item);
++		int rx = 0, ry = 0, rw = 0, rh = 0;
++		if (!src || !match_capture_rect_for_source(src, rx, ry, rw, rh))
++			continue;
++		sawCaptureRect = true;
++		if (cursorX < rx || cursorX >= rx + rw || cursorY < ry || cursorY >= ry + rh)
++			continue;
++
++		const uint32_t sourceW = obs_source_get_width(src);
++		const uint32_t sourceH = obs_source_get_height(src);
++		if (sourceW == 0 || sourceH == 0)
++			continue;
++
++		const double relX = (cursorX - rx) / (double)rw;
++		const double relY = (cursorY - ry) / (double)rh;
++		matrix4 draw{};
++		bool haveOriginal = false;
++		if (!useCurrentTransform && zoomActive.load(std::memory_order_acquire)) {
++			for (const auto &state : sceneItems) {
++				if (state.item == item && state.orig.valid) {
++					draw = state.orig.drawTransform;
++					haveOriginal = true;
++					break;
++				}
++			}
++		}
++		if (!haveOriginal)
++			obs_sceneitem_get_draw_transform(item, &draw);
++
++		vec3 local{};
++		vec3 mapped{};
++		vec3_set(&local, (float)(relX * sourceW), (float)(relY * sourceH), 0.0f);
++		vec3_transform(&mapped, &local, &draw);
++		sx = mapped.x;
++		sy = mapped.y;
++		cursorInside = true;
++		return true;
++	}
++	if (sawCaptureRect)
++		return false;
++
++	/* Display capture and unusual source types still retain the previous
++	 * monitor-based fallback. */
+ 	int rx = 0, ry = 0, rw = 0, rh = 0;
+ 	if (!getSelectedScreenRect(rx, ry, rw, rh) || rw <= 0 || rh <= 0)
+ 		return false;
+@@ -2049,6 +2167,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
+ 	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
+ }
+ 
++void ZoominatorController::rebuildEnhancedCursorImage()
++{
++	const int size = 64;
++	const QString path = enhancedCursorImagePath();
++	if (path.isEmpty())
++		return;
++	ensure_parent_dir_exists(path);
++
++	QImage img(size, size, QImage::Format_ARGB32_Premultiplied);
++	img.fill(Qt::transparent);
++	QPainter painter(&img);
++	painter.setRenderHint(QPainter::Antialiasing, true);
++
++	QColor accent = QColor::fromRgba(markerColor);
++	if (!accent.isValid() || accent.alpha() == 0)
++		accent = QColor(91, 173, 255);
++
++	QColor halo = accent;
++	halo.setAlpha(150);
++	QPen haloPen(halo);
++	haloPen.setWidthF(2.2);
++	haloPen.setCosmetic(true);
++	painter.setPen(haloPen);
++	painter.setBrush(Qt::NoBrush);
++	painter.drawEllipse(QRectF(8.0, 8.0, 48.0, 48.0));
++
++	QColor glow = accent;
++	glow.setAlpha(55);
++	painter.setPen(Qt::NoPen);
++	painter.setBrush(glow);
++	painter.drawEllipse(QRectF(20.0, 20.0, 24.0, 24.0));
++
++	painter.setBrush(QColor(7, 17, 36, 230));
++	painter.setPen(QPen(QColor(245, 250, 255, 245), 2.0));
++	painter.drawEllipse(QRectF(26.0, 26.0, 12.0, 12.0));
++	painter.setPen(Qt::NoPen);
++	painter.setBrush(accent);
++	painter.drawEllipse(QRectF(30.0, 30.0, 4.0, 4.0));
++	painter.end();
++
++	img.save(path, "PNG");
++}
++
++void ZoominatorController::ensureEnhancedCursorSource()
++{
++	if (enhancedCursorSource)
++		return;
++
++	rebuildEnhancedCursorImage();
++	const QString path = enhancedCursorImagePath();
++	if (path.isEmpty())
++		return;
++
++	obs_data_t *settings = obs_data_create();
++	obs_data_set_string(settings, "file", path.toUtf8().constData());
++	obs_data_set_bool(settings, "unload", false);
++	enhancedCursorSource = obs_source_create_private("image_source", kZoominatorEnhancedCursorSourceName, settings);
++	obs_data_release(settings);
++}
++
++obs_sceneitem_t *ZoominatorController::ensureEnhancedCursorItem(obs_scene_t *scene)
++{
++	if (!scene)
++		return nullptr;
++	ensureEnhancedCursorSource();
++	if (!enhancedCursorSource)
++		return nullptr;
++
++	struct Finder {
++		obs_source_t *want = nullptr;
++		obs_sceneitem_t *found = nullptr;
++		static bool enum_cb(obs_scene_t *, obs_sceneitem_t *item, void *param)
++		{
++			auto *finder = static_cast<Finder *>(param);
++			if (!finder || finder->found)
++				return false;
++			if (obs_sceneitem_get_source(item) == finder->want) {
++				finder->found = item;
++				return false;
++			}
++			return true;
++		}
++	};
++
++	Finder finder{enhancedCursorSource, nullptr};
++	obs_scene_enum_items(scene, Finder::enum_cb, &finder);
++	if (finder.found) {
++		normalize_marker_scene_item(finder.found);
++		return finder.found;
++	}
++
++	obs_sceneitem_t *item = obs_scene_add(scene, enhancedCursorSource);
++	if (item)
++		normalize_marker_scene_item(item);
++	return item;
++}
++
++void ZoominatorController::hideEnhancedCursorInScene(obs_scene_t *scene)
++{
++	if (!scene || !enhancedCursorSource)
++		return;
++
++	struct Finder {
++		obs_source_t *want = nullptr;
++		static bool enum_cb(obs_scene_t *, obs_sceneitem_t *item, void *param)
++		{
++			auto *want = static_cast<obs_source_t **>(param);
++			if (want && obs_sceneitem_get_source(item) == *want) {
++				obs_sceneitem_set_visible(item, false);
++				return false;
++			}
++			return true;
++		}
++	};
++	obs_source_t *want = enhancedCursorSource;
++	obs_scene_enum_items(scene, Finder::enum_cb, &want);
++}
++
++void ZoominatorController::updateEnhancedCursorPosition(obs_scene_t *scene, double x, double y)
++{
++	obs_sceneitem_t *item = ensureEnhancedCursorItem(scene);
++	if (!item)
++		return;
++	normalize_marker_scene_item(item);
++	vec2 pos{};
++	pos.x = (float)x;
++	pos.y = (float)y;
++	obs_sceneitem_set_pos(item, &pos);
++	if (!obs_sceneitem_visible(item))
++		obs_sceneitem_set_visible(item, true);
++	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
++}
++
+ void ZoominatorController::rebuildMarkerImage()
+ {
+ 	const int size = std::clamp(markerSize, 6, 512);
+@@ -2071,16 +2322,25 @@ void ZoominatorController::rebuildMarkerImage()
  		stroke.setAlpha(255);
  	stroke.setAlpha(255);
  
@@ -36,29 +368,95 @@ index 255eba5..37f113b 100644
  	painter.end();
  
  	img.save(path, "PNG");
-@@ -2260,9 +2269,9 @@ bool ZoominatorController::captureMarkerClickPosition()
+@@ -2253,29 +2513,63 @@ bool ZoominatorController::captureMarkerClickPosition()
  		return false;
  
- 	const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+ 	int cx = 0, cy = 0;
+-	float mx = 0.f, my = 0.f;
+-	bool inside = false;
+-	const bool mapped = getCursorPos(cx, cy) && mapCursorToScenePixels(cx, cy, mx, my, inside);
+-	if (!mapped || !inside)
++	if (!getCursorPos(cx, cy))
++		return false;
++	return captureMarkerClickPosition(cx, cy);
++}
++
++bool ZoominatorController::captureMarkerClickPosition(int cursorX, int cursorY)
++{
++	if (!showCursorMarker || !markerOnlyOnClick)
+ 		return false;
+ 
+-	const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
 -	static constexpr qint64 kMarkerFadeInMs = 110;
 -	static constexpr qint64 kMarkerHoldMs = 420;
 -	static constexpr qint64 kMarkerFadeOutMs = 220;
-+	static constexpr qint64 kMarkerFadeInMs = 90;
-+	static constexpr qint64 kMarkerHoldMs = 50;
-+	static constexpr qint64 kMarkerFadeOutMs = 780;
  	{
  		std::lock_guard<std::mutex> lock(inputMutex);
- 		markerClickX = mx;
-@@ -2287,7 +2296,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+-		markerClickX = mx;
+-		markerClickY = my;
+-		markerClickHasPos = true;
+-		markerClickFlashStartMs = nowMs;
+-		markerClickFlashHoldUntilMs = nowMs + kMarkerFadeInMs + kMarkerHoldMs;
+-		markerClickFlashFadeOutEndMs = markerClickFlashHoldUntilMs + kMarkerFadeOutMs;
++		markerClickScreenX = cursorX;
++		markerClickScreenY = cursorY;
++		markerClickCapturedAtMs = QDateTime::currentMSecsSinceEpoch();
++		markerClickPending = true;
+ 	}
+-	ensureTicking(true);
++	QMetaObject::invokeMethod(this, [this]() {
++		if (!shuttingDown)
++			ensureTicking(true);
++	}, Qt::QueuedConnection);
+ 	return true;
+ }
+ 
++void ZoominatorController::resolvePendingMarkerClick()
++{
++	int cursorX = 0;
++	int cursorY = 0;
++	qint64 capturedAtMs = 0;
++	{
++		std::lock_guard<std::mutex> lock(inputMutex);
++		if (!markerClickPending)
++			return;
++		cursorX = markerClickScreenX;
++		cursorY = markerClickScreenY;
++		capturedAtMs = markerClickCapturedAtMs;
++		markerClickPending = false;
++	}
++
++	float mx = 0.f, my = 0.f;
++	bool inside = false;
++	if (!mapCursorToScenePixels(cursorX, cursorY, mx, my, inside) || !inside)
++		return;
++
++	static constexpr qint64 kMarkerFadeInMs = 120;
++	static constexpr qint64 kMarkerHoldMs = 90;
++	static constexpr qint64 kMarkerFadeOutMs = 1100;
++	const qint64 nowMs = std::max(capturedAtMs, QDateTime::currentMSecsSinceEpoch());
++	std::lock_guard<std::mutex> lock(inputMutex);
++	markerClickX = mx;
++	markerClickY = my;
++	markerClickHasPos = true;
++	markerClickFlashStartMs = nowMs;
++	markerClickFlashHoldUntilMs = nowMs + kMarkerFadeInMs + kMarkerHoldMs;
++	markerClickFlashFadeOutEndMs = markerClickFlashHoldUntilMs + kMarkerFadeOutMs;
++}
++
+ bool ZoominatorController::isMarkerFlashActive(qint64 nowMs) const
+ {
+ 	return showCursorMarker && markerOnlyOnClick && markerClickHasPos && markerClickFlashFadeOutEndMs > 0 &&
+@@ -2287,7 +2581,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	if (!showCursorMarker || !markerOnlyOnClick || !markerClickHasPos)
  		return 0;
  
 -	static constexpr qint64 kMarkerFadeInMs = 110;
-+	static constexpr qint64 kMarkerFadeInMs = 90;
++	static constexpr qint64 kMarkerFadeInMs = 120;
  	if (markerClickFlashFadeOutEndMs <= 0 || nowMs >= markerClickFlashFadeOutEndMs) {
  		std::lock_guard<std::mutex> lock(inputMutex);
  		markerClickHasPos = false;
-@@ -2312,7 +2321,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2312,7 +2606,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	return (int)std::round((1.0 - smoothstep(tOut)) * 255.0);
  }
  
@@ -72,14 +470,14 @@ index 255eba5..37f113b 100644
 +					       (double)(markerClickFlashFadeOutEndMs - markerClickFlashStartMs),
 +				       0.0, 1.0);
 +	const double easeOutCubic = 1.0 - std::pow(1.0 - progress, 3.0);
-+	return 0.58 + easeOutCubic * 1.62;
++	return 0.72 + easeOutCubic * 2.63;
 +}
 +
 +void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255, double scale)
  {
  	if (!showCursorMarker)
  		return;
-@@ -2334,6 +2355,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+@@ -2334,6 +2640,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
  		return;
  
  	normalize_marker_scene_item(item);
@@ -90,8 +488,51 @@ index 255eba5..37f113b 100644
  
  	vec2 pos{};
  	pos.x = (float)x;
-@@ -2838,7 +2863,7 @@ void ZoominatorController::onTick()
+@@ -2353,6 +2663,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
+ 	OrigState orig = readSceneItemTransform(item);
+ 	if (!orig.valid)
+ 		return;
++	obs_sceneitem_get_draw_transform(item, &orig.drawTransform);
+ 
+ 	float renderedW = 0.0f;
+ 	float renderedH = 0.0f;
+@@ -2813,8 +3124,10 @@ void ZoominatorController::onTick()
+ 		return;
+ 	}
+ 
++	resolvePendingMarkerClick();
+ 	const bool zoomTickWanted = tickingWanted.load(std::memory_order_acquire);
+-	if (!zoomTickWanted && !markerClickHasPos) {
++	const bool persistentCursorWanted = showCursorMarker && showMarkerWhenNotZoomed;
++	if (!zoomTickWanted && !markerClickHasPos && !persistentCursorWanted) {
+ 		ensureTicking(false);
+ 		return;
+ 	}
+@@ -2828,17 +3141,26 @@ void ZoominatorController::onTick()
+ 		return;
+ 	}
+ 
+-	/* A click halo has its own short lifetime and must keep rendering even when
+-	 * no zoom animation is active. Its captured position is already in canvas
+-	 * coordinates, so this path can display and fade it entirely on the main
+-	 * thread without starting or mutating zoom state. */
++	/* The enhanced cursor is an OBS-only overlay. It follows the accurately
++	 * mapped capture position while the user's real Windows cursor is untouched.
++	 * The click ripple has its own longer, independent lifetime. */
+ 	if (!zoomTickWanted) {
+ 		const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
++		int cx = 0, cy = 0;
++		float cursorSceneX = 0.0f, cursorSceneY = 0.0f;
++		bool cursorInside = false;
++		const bool cursorMapped =
++			getCursorPos(cx, cy) && mapCursorToScenePixels(cx, cy, cursorSceneX, cursorSceneY, cursorInside, true);
+ 		obs_source_t *sceneSource = obs_frontend_get_current_scene();
  		if (obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr) {
++			if (persistentCursorWanted && cursorMapped && cursorInside)
++				updateEnhancedCursorPosition(scene, cursorSceneX, cursorSceneY);
++			else
++				hideEnhancedCursorInScene(scene);
++
  			const int opacity = currentMarkerOpacity(nowMs);
  			if (showCursorMarker && opacity > 0)
 -				updateMarkerPosition(scene, markerClickX, markerClickY, opacity);
@@ -99,7 +540,49 @@ index 255eba5..37f113b 100644
  			else
  				hideMarkerInScene(scene);
  		}
-@@ -2893,10 +2918,11 @@ void ZoominatorController::onTick()
+@@ -2850,7 +3172,8 @@ void ZoominatorController::onTick()
+ 			markerClickFlashStartMs = 0;
+ 			markerClickFlashHoldUntilMs = 0;
+ 			markerClickFlashFadeOutEndMs = 0;
+-			ensureTicking(false);
++			if (!persistentCursorWanted)
++				ensureTicking(false);
+ 		}
+ 		return;
+ 	}
+@@ -2862,8 +3185,8 @@ void ZoominatorController::onTick()
+ 			if (debug)
+ 				blog(LOG_WARNING, "[Zoominator] No movable scene items in current scene.");
+ 			tickingWanted.store(false, std::memory_order_release);
+-			ensureTicking(false);
+ 			resetState();
++			ensureTicking(persistentCursorWanted);
+ 			return;
+ 		}
+ 
+@@ -2877,10 +3200,21 @@ void ZoominatorController::onTick()
+ 	}
+ 
+ 	obs_source_t *sceneSource = obs_frontend_get_current_scene();
++	int cx = 0, cy = 0;
++	const bool haveCursor = getCursorPos(cx, cy);
++	float currentX = 0.0f, currentY = 0.0f;
++	bool currentInside = false;
++	const bool currentMapped =
++		haveCursor && mapCursorToScenePixels(cx, cy, currentX, currentY, currentInside, true);
+ 
+ 	/* All marker scene-graph mutation happens here, on the main thread, using
+ 	 * the placement the graphics tick published. */
+ 	if (obs_scene_t *sc = sceneSource ? obs_scene_from_source(sceneSource) : nullptr) {
++		if (persistentCursorWanted && currentMapped && currentInside)
++			updateEnhancedCursorPosition(sc, currentX, currentY);
++		else
++			hideEnhancedCursorInScene(sc);
++
+ 		bool markerVisible = false;
+ 		double markerX = 0.0, markerY = 0.0;
+ 		{
+@@ -2891,9 +3225,10 @@ void ZoominatorController::onTick()
  		}
  
  		if (showCursorMarker && markerVisible) {
@@ -112,21 +595,103 @@ index 255eba5..37f113b 100644
  			else
  				hideMarkerInScene(sc);
  		} else if (showCursorMarker) {
- 			hideMarkerInScene(sc);
+@@ -2901,10 +3236,9 @@ void ZoominatorController::onTick()
+ 		}
+ 	}
+ 
+-	int cx = 0, cy = 0;
+ 	float sx = 0.0f, sy = 0.0f;
+ 	bool insideNow = false;
+-	const bool mappedNow = getCursorPos(cx, cy) && mapCursorToScenePixels(cx, cy, sx, sy, insideNow);
++	const bool mappedNow = haveCursor && mapCursorToScenePixels(cx, cy, sx, sy, insideNow);
+ 
+ 	obs_source_t *previousRef = nullptr;
+ 	{
+@@ -2984,8 +3318,8 @@ void ZoominatorController::finishZoomOnMainThread()
+ 	restoringRecovery = false;
+ 	clearRecoveryActive();
+ 	tickingWanted.store(false, std::memory_order_release);
+-	ensureTicking(false);
+ 	resetState();
++	ensureTicking(showCursorMarker && showMarkerWhenNotZoomed);
+ 
+ 	obs_source_t *staleRef = nullptr;
+ 	{
+@@ -3283,7 +3617,7 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
+ 		}
+ 
+ 		if (down)
+-			g_ctl->captureMarkerClickPosition();
++			g_ctl->captureMarkerClickPosition((int)m->pt.x, (int)m->pt.y);
+ 
+ 		if (g_ctl->triggerType == "mouse" && (down || up)) {
+ 			if (mods_current(g_ctl->modCtrl, g_ctl->modAlt, g_ctl->modShift, g_ctl->modWin,
 diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
-index 053750f..f8e742d 100644
+index 053750f..ef2de9f 100644
 --- a/src/zoominator-controller.hpp
 +++ b/src/zoominator-controller.hpp
-@@ -153,10 +153,11 @@ private:
+@@ -138,7 +138,8 @@ private:
+ 	void enumerateTargetItemsInCurrentScene(std::vector<obs_sceneitem_t *> &items) const;
+ 
+ 	bool getCursorPos(int &x, int &y) const;
+-	bool mapCursorToScenePixels(int cursorX, int cursorY, float &sx, float &sy, bool &cursorInside) const;
++	bool mapCursorToScenePixels(int cursorX, int cursorY, float &sx, float &sy, bool &cursorInside,
++				    bool useCurrentTransform = false) const;
+ 
+ 	void captureOriginal(obs_sceneitem_t *item);
+ 	void restoreOriginal(obs_sceneitem_t *item);
+@@ -146,17 +147,26 @@ private:
+ 	void restoreOriginalSceneItems(const std::vector<obs_sceneitem_t *> &items);
+ 	void restoreOriginalSceneItemsFromState();
+ 	QString markerImagePath() const;
++	QString enhancedCursorImagePath() const;
+ 	void ensureMarkerSource();
+ 	obs_sceneitem_t *ensureMarkerItem(obs_scene_t *scene);
+ 	void hideMarkerInScene(obs_scene_t *scene);
++	void ensureEnhancedCursorSource();
++	obs_sceneitem_t *ensureEnhancedCursorItem(obs_scene_t *scene);
++	void hideEnhancedCursorInScene(obs_scene_t *scene);
++	void rebuildEnhancedCursorImage();
++	void updateEnhancedCursorPosition(obs_scene_t *scene, double x, double y);
+ 	void rebuildMarkerImage();
  	void ensureMarkerFilter();
  	void applyMarkerOpacity(int opacity255);
  	void updateMarkerAppearance();
 -	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255);
 +	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255, double scale);
  	bool captureMarkerClickPosition();
++	bool captureMarkerClickPosition(int cursorX, int cursorY);
++	void resolvePendingMarkerClick();
  	bool isMarkerFlashActive(qint64 nowMs) const;
  	int currentMarkerOpacity(qint64 nowMs);
 +	double currentMarkerScale(qint64 nowMs) const;
  	void applyZoomToScene(double t);
  
  	/* Split loop. Frame-critical work runs on OBS's graphics thread via
+@@ -226,6 +236,10 @@ private:
+ 	float targetY = 0.0f;
+ 
+ 	bool markerClickHasPos = false;
++	bool markerClickPending = false;
++	int markerClickScreenX = 0;
++	int markerClickScreenY = 0;
++	qint64 markerClickCapturedAtMs = 0;
+ 	float markerClickX = 0.0f;
+ 	float markerClickY = 0.0f;
+ 	uint32_t markerAppearanceHash = 0;
+@@ -247,6 +261,7 @@ private:
+ 		obs_sceneitem_crop crop{};
+ 		vec2 effectivePos{};
+ 		vec2 effectiveScale{};
++		matrix4 drawTransform{};
+ 	};
+ 
+ 	struct SceneItemState {
+@@ -282,6 +297,7 @@ private:
+ 
+ 	QPointer<ZoominatorDialog> dialog;
+ 	obs_source_t *markerSource = nullptr;
++	obs_source_t *enhancedCursorSource = nullptr;
+ 
+ 	int hotkeyVk = 0;
+ 	bool hkValid = false;

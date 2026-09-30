@@ -67,6 +67,17 @@ $profileText = [IO.File]::ReadAllText($profileSource).Replace('{{RECORD_PATH}}',
 
 Copy-Item -LiteralPath $pluginSource -Destination $pluginTarget -Force
 
+$controlBarScript = Join-Path $repoRoot 'scripts\start-control-bar.ps1'
+$desktop = [Environment]::GetFolderPath('Desktop')
+$controlBarShortcut = Join-Path $desktop 'OBS 控制条.lnk'
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($controlBarShortcut)
+$shortcut.TargetPath = (Get-Command powershell.exe).Source
+$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$controlBarScript`""
+$shortcut.WorkingDirectory = $repoRoot
+$shortcut.Description = 'OBS Talk Demo Studio 屏幕悬浮控制条（不会被录制）'
+$shortcut.Save()
+
 Write-Host '安装完成。' -ForegroundColor Green
 Write-Host "场景集合：$sceneTarget"
 Write-Host "配置文件：$profileTarget"
@@ -75,3 +86,4 @@ if (Test-Path -LiteralPath $backupRoot) {
     Write-Host "原配置备份：$backupRoot"
 }
 Write-Host '重新打开 OBS 后，请选择自己的窗口、摄像头和麦克风。'
+Write-Host "悬浮控制条快捷方式：$controlBarShortcut"
