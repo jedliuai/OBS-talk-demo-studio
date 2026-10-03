@@ -118,7 +118,11 @@ plugin/                 Zoominator 水波补丁与说明
 scripts/                安装与备份脚本
 .github/workflows/      可复现的插件构建流程
 docs/                   安装、快捷键与设计决策
+worklog/                中文工作总结与演进记录
+local-backups/          仅本地备份与验证截图（不上传 GitHub）
 ```
+
+本地项目已统一归入 `OBS/OBS-talk-demo-studio/`。目录清理、历史资料和后续同步方式见[项目整理说明](docs/ORGANIZATION.md)。后续有效修改完成验证后，及时提交并推送 GitHub；维护约定见 [AGENTS.md](AGENTS.md)。
 
 ## 致谢
 
