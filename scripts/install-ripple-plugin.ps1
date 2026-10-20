@@ -75,7 +75,7 @@ try {
     }
 
     $dllHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-    Write-Host '水波版 Zoominator 安装完成。' -ForegroundColor Green
+    Write-Host '增强版 Zoominator 安装完成（干净光标、点击反馈、死区跟随）。' -ForegroundColor Green
     Write-Host "插件路径：$destination"
     Write-Host "DLL SHA256：$dllHash"
 } finally {
