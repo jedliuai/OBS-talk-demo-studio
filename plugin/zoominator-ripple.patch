@@ -1,5 +1,5 @@
 diff --git a/data/locale/en-US.ini b/data/locale/en-US.ini
-index f43a77e..e57271e 100644
+index f43a77e..63314ae 100644
 --- a/data/locale/en-US.ini
 +++ b/data/locale/en-US.ini
 @@ -40,7 +40,7 @@ Dialog.ModifierHelp="Use Any for legacy behavior, or choose L / R explicitly."
@@ -22,7 +22,7 @@ index f43a77e..e57271e 100644
  Dialog.CenterCursorUntilEdge="Keep cursor centered until the capture reaches an edge"
  Dialog.CenterCursorUntilEdgeTooltip="Maps the full captured monitor to the full captured scene content, which improves ultrawide tracking and clamps only when an edge is reached."
  Dialog.EdgeOverflowMargin="Edge Overflow Margin"
-@@ -69,10 +73,12 @@ Dialog.MouseIdleTimeoutTooltip="Freeze the current view after the mouse has not
+@@ -69,10 +73,16 @@ Dialog.MouseIdleTimeoutTooltip="Freeze the current view after the mouse has not
  Dialog.Disabled="Disabled"
  Dialog.PortraitCover="Portrait cover, auto-scale to fill vertical canvases"
  Dialog.PortraitCoverTooltip="When the canvas is taller than wide, scale the capture so it fills the canvas with no top / bottom gaps."
@@ -35,15 +35,19 @@ index f43a77e..e57271e 100644
 +Dialog.ShowHaloWhenNotZoomed="Also when not zoomed"
 +Dialog.ShowHaloWhenNotZoomedTooltip="Keep the cursor arrow and click effects while the zoom effect is inactive."
 +Dialog.ReplaceSystemCursor="Replace the system cursor with a clean arrow"
++Dialog.ClickSound="Soft click sound"
++Dialog.ClickSoundTooltip="Play a soft, short tap on every mouse press over a capture that shows the clean arrow. It is recorded on track 1 (mix) and track 4 (clicks only) and is not monitored, so you do not hear it while recording. Hotkeys never make a sound."
++Dialog.ClickSoundVolume="Click volume"
++Dialog.ClickSoundVolumeTooltip="Gain applied to the click sound. 0 dB keeps the built-in level of -18 dBFS peak."
 +Dialog.ReplaceSystemCursorTooltip="Draws a 1.5x white arrow with a soft shadow in the recording and hides the captured system cursor on the selected capture sources. Text I-beams and link hands also show as the arrow. Turn off to bring the system cursor back."
  Dialog.ShowOnlyOnClick="Show only on click"
  Dialog.ShowOnlyOnClickTooltip="When enabled, the halo flashes at the click position instead of following the cursor continuously."
  Dialog.HaloSize="Halo Size"
 diff --git a/data/locale/zh-CN.ini b/data/locale/zh-CN.ini
-index b647d0c..8441f2f 100644
+index b647d0c..e18ae48 100644
 --- a/data/locale/zh-CN.ini
 +++ b/data/locale/zh-CN.ini
-@@ -47,19 +47,25 @@ Dialog.RefreshLists="刷新列表"
+@@ -47,19 +47,29 @@ Dialog.RefreshLists="刷新列表"
  Dialog.RequiredModifiers="需要的修饰键"
  Dialog.RingThickness="圆环粗细"
  Dialog.Section.Canvas="画布"
@@ -63,6 +67,10 @@ index b647d0c..8441f2f 100644
 +Dialog.ShowHaloWhenNotZoomed="未放大时也显示"
 +Dialog.ShowHaloWhenNotZoomedTooltip="没有放大时也显示光标箭头和点击效果。"
 +Dialog.ReplaceSystemCursor="用干净的箭头替换系统光标"
++Dialog.ClickSound="轻柔点击音效"
++Dialog.ClickSoundTooltip="在显示干净箭头的捕获画面上按下鼠标时，播放一声很轻的“嗒”。录进轨道 1（混音）和轨道 4（单独的点击音轨），不监听，录制时自己听不到。快捷键不会发声。"
++Dialog.ClickSoundVolume="点击音量"
++Dialog.ClickSoundVolumeTooltip="点击音效的增益。0 dB 即使用内置音量（峰值 -18 dBFS）。"
 +Dialog.ReplaceSystemCursorTooltip="在录制画面里画一个 1.5 倍、带柔和投影的白色箭头，并隐藏所选捕获源自带的系统光标。文本输入的 I 形光标和链接上的手形光标也会显示为箭头。关闭后恢复系统光标。"
  Dialog.ShowOnlyOnClick="仅点击时显示"
  Dialog.ShowOnlyOnClickTooltip="启用后，光环会在点击位置闪烁，而不是持续跟随光标。"
@@ -75,7 +83,7 @@ index b647d0c..8441f2f 100644
  Dialog.StatusTip="提示：选择用于驱动场景移动的显示器。"
  Dialog.SupportMessage="<b>谢谢，Zoominator 已正式超过 20,000 次下载！</b><br>随着我维护这个插件和其他免费资源，GitHub Actions、托管和开发成本正在增加。如果您想提供帮助，您可以选择通过 <a href='https://www.paypal.com/donate/?hosted_button_id=ZKTLLYY9ADWYQ'>$3 小费通过 PayPal</a>，这将非常有意义，但绝对没有任何义务。"
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..cdbd27d 100644
+index 255eba5..8ac77e9 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
 @@ -2,6 +2,8 @@
@@ -87,21 +95,31 @@ index 255eba5..cdbd27d 100644
  #include <util/platform.h>
  
  #include <QGuiApplication>
-@@ -16,6 +18,8 @@
+@@ -16,6 +18,9 @@
  #include <QImage>
  #include <QPainter>
  #include <QPen>
 +#include <QPainterPath>
 +#include <cstring>
++#include <string>
  
  #include <cmath>
  #include <algorithm>
-@@ -63,6 +67,26 @@ static int qtKeyToVk(int qtKey);
+@@ -63,6 +68,35 @@ static int qtKeyToVk(int qtKey);
  
  static constexpr const char *kZoominatorMarkerSourceName = "Zoominator Cursor Marker";
  static constexpr const char *kZoominatorMarkerSourceId = "zoominator_marker_source";
 +static constexpr const char *kZoominatorEnhancedCursorSourceName = "Zoominator Enhanced Cursor";
 +static constexpr const char *kZoominatorClickRingSourceName = "Zoominator Click Ring";
++/* The Chinese names "Zoominator click sound" and "00 audio bus" used by the
++ * studio template, spelled as UTF-8 bytes so this file stays ASCII whatever
++ * the compiler's source charset. */
++static constexpr const char *kZoominatorClickSoundSourceName =
++	"Zoominator \xe7\x82\xb9\xe5\x87\xbb\xe9\x9f\xb3\xe6\x95\x88";
++static constexpr const char *kZoominatorAudioBusSceneName = "00 \xe9\x9f\xb3\xe9\xa2\x91\xe6\x80\xbb\xe7\xba\xbf";
++static constexpr const char *kZoominatorClickSoundFile = "sounds/zoominator-click.wav";
++/* Track 1 is the mix, track 4 carries the clicks alone for the edit. */
++static constexpr uint32_t kClickSoundMixers = (1u << 0) | (1u << 3);
 +
 +/* Cursor and click feedback, in pixels of a 1080p canvas and milliseconds. */
 +static constexpr double kCursorArrowScale = 1.5;
@@ -113,17 +131,26 @@ index 255eba5..cdbd27d 100644
 +static constexpr double kCursorReleaseMs = 180.0;
 +static constexpr double kClickFillStartRadius = 13.0;
 +static constexpr double kClickFillEndRadius = 30.0;
-+static constexpr double kClickFillOpacity = 0.32;
++static constexpr double kClickFillOpacity = 0.26;
 +static constexpr double kClickFillMs = 450.0;
 +static constexpr double kClickRingStartRadius = 24.0;
 +static constexpr double kClickRingEndRadius = 42.0;
 +static constexpr double kClickRingDrawRadius = 28.0;
-+static constexpr double kClickRingOpacity = 0.42;
++static constexpr double kClickRingOpacity = 0.8;
 +static constexpr double kClickRingMs = 500.0;
  static void cleanup_legacy_marker_items_all_scenes(obs_source_t *currentMarkerSource = nullptr);
  static bool source_name_starts_with(const char *name, const char *prefix);
  static void collect_live_scene_items(obs_scene_t *scene, std::vector<obs_sceneitem_t *> &items);
-@@ -266,6 +290,7 @@ ZoominatorController::ZoominatorController()
+@@ -88,7 +122,7 @@ void ZoominatorController::beginWheelZoomGesture()
+ 	zoomAdjustButtonHeld = true;
+ 	zoomAdjustedDuringButtonHold = false;
+ 	wheelDeltaRemainder = 0;
+-	captureMarkerClickPosition();
++	captureMarkerClickPosition(false);
+ }
+ 
+ void ZoominatorController::adjustActiveZoomFromWheel(int direction, int steps)
+@@ -266,6 +300,7 @@ ZoominatorController::ZoominatorController()
  ZoominatorController::~ZoominatorController()
  {
  	markerSource = nullptr;
@@ -131,7 +158,7 @@ index 255eba5..cdbd27d 100644
  }
  
  QString ZoominatorController::configPath() const
-@@ -288,6 +313,26 @@ QString ZoominatorController::markerImagePath() const
+@@ -288,6 +323,26 @@ QString ZoominatorController::markerImagePath() const
  	return p;
  }
  
@@ -158,15 +185,16 @@ index 255eba5..cdbd27d 100644
  QString ZoominatorController::sceneItemKey(obs_sceneitem_t *item) const
  {
  	if (!item)
-@@ -544,6 +589,7 @@ void ZoominatorController::frontendEventCallback(enum obs_frontend_event event,
+@@ -544,6 +599,8 @@ void ZoominatorController::frontendEventCallback(enum obs_frontend_event event,
  	    event == OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED) {
  		QTimer::singleShot(750, ctl, [ctl]() { ctl->requestRecoveryRestore(); });
  		QTimer::singleShot(3000, ctl, [ctl]() { cleanup_legacy_marker_items_all_scenes(ctl->markerSource); });
 +		QTimer::singleShot(1000, ctl, [ctl]() { ctl->syncCaptureCursorSetting(); });
++		QTimer::singleShot(1200, ctl, [ctl]() { ctl->prepareClickSound(); });
  	}
  }
  
-@@ -581,10 +627,16 @@ void ZoominatorController::initialize()
+@@ -581,10 +638,16 @@ void ZoominatorController::initialize()
  {
  	loadSettings();
  	rebuildTriggersFromSettings();
@@ -183,7 +211,7 @@ index 255eba5..cdbd27d 100644
  	QTimer::singleShot(3000, this, [this]() { requestRecoveryRestore(); });
  	QTimer::singleShot(5000, this, [this]() { cleanup_legacy_marker_items_all_scenes(markerSource); });
  }
-@@ -602,6 +654,14 @@ void ZoominatorController::shutdown()
+@@ -602,6 +665,14 @@ void ZoominatorController::shutdown()
  	zoomActive.store(false, std::memory_order_release);
  	tickingWanted.store(false, std::memory_order_release);
  	obs_frontend_remove_event_callback(frontendEventCallback, this);
@@ -198,7 +226,7 @@ index 255eba5..cdbd27d 100644
  	uninstallHooks();
  	ensureTicking(false);
  
-@@ -617,6 +677,23 @@ void ZoominatorController::shutdown()
+@@ -617,6 +688,23 @@ void ZoominatorController::shutdown()
  		dialog->close();
  }
  
@@ -222,7 +250,7 @@ index 255eba5..cdbd27d 100644
  void ZoominatorController::showDialog()
  {
  	if (!dialog) {
-@@ -661,12 +738,15 @@ void ZoominatorController::loadSettings()
+@@ -661,12 +749,17 @@ void ZoominatorController::loadSettings()
  	zoomAnchor = ZoomAnchorMode::CursorFollow;
  	followMouseRuntimeEnabled = true;
  	followSpeed = 8.0;
@@ -235,10 +263,12 @@ index 255eba5..cdbd27d 100644
  	showCursorMarker = false;
  	showMarkerWhenNotZoomed = false;
 +	replaceSystemCursor = true;
++	clickSound = true;
++	clickSoundVolumeDb = 0.0;
  	markerOnlyOnClick = true;
  	markerColor = 0xFFFF0000;
  	markerSize = 26;
-@@ -842,6 +922,12 @@ void ZoominatorController::loadSettings()
+@@ -842,6 +935,12 @@ void ZoominatorController::loadSettings()
  		followSpeed = obs_data_get_double(data, "follow_speed");
  	if (followSpeed <= 0.1)
  		followSpeed = 8.0;
@@ -251,16 +281,21 @@ index 255eba5..cdbd27d 100644
  	if (obs_data_has_user_value(data, "center_cursor_until_edge"))
  		centerCursorUntilEdge = obs_data_get_bool(data, "center_cursor_until_edge");
  	if (obs_data_has_user_value(data, "edge_overflow_margin_pct"))
-@@ -859,6 +945,8 @@ void ZoominatorController::loadSettings()
+@@ -859,6 +958,13 @@ void ZoominatorController::loadSettings()
  		showCursorMarker = obs_data_get_bool(data, "show_cursor_marker");
  	if (obs_data_has_user_value(data, "show_marker_when_not_zoomed"))
  		showMarkerWhenNotZoomed = obs_data_get_bool(data, "show_marker_when_not_zoomed");
 +	if (obs_data_has_user_value(data, "replace_system_cursor"))
 +		replaceSystemCursor = obs_data_get_bool(data, "replace_system_cursor");
++	if (obs_data_has_user_value(data, "click_sound"))
++		clickSound = obs_data_get_bool(data, "click_sound");
++	if (obs_data_has_user_value(data, "click_sound_volume_db"))
++		clickSoundVolumeDb = obs_data_get_double(data, "click_sound_volume_db");
++	clickSoundVolumeDb = clampd(clickSoundVolumeDb, -40.0, 12.0);
  	// Continuous cursor tracking was inaccurate on captures whose aspect ratio
  	// differs from the OBS canvas. The marker is intentionally click-only.
  	markerOnlyOnClick = true;
-@@ -945,6 +1033,8 @@ void ZoominatorController::saveSettings()
+@@ -945,6 +1051,8 @@ void ZoominatorController::saveSettings()
  	obs_data_set_bool(data, "follow_mouse", zoomAnchor == ZoomAnchorMode::CursorFollow);
  	followMouseRuntimeEnabled = true;
  	obs_data_set_double(data, "follow_speed", followSpeed);
@@ -269,15 +304,17 @@ index 255eba5..cdbd27d 100644
  	obs_data_set_bool(data, "center_cursor_until_edge", centerCursorUntilEdge);
  	obs_data_set_int(data, "edge_overflow_margin_pct", edgeOverflowMarginPct);
  	obs_data_set_bool(data, "allow_canvas_overflow", edgeOverflowMarginPct > 0);
-@@ -952,6 +1042,7 @@ void ZoominatorController::saveSettings()
+@@ -952,6 +1060,9 @@ void ZoominatorController::saveSettings()
  	obs_data_set_bool(data, "portrait_cover", portraitCover);
  	obs_data_set_bool(data, "show_cursor_marker", showCursorMarker);
  	obs_data_set_bool(data, "show_marker_when_not_zoomed", showMarkerWhenNotZoomed);
 +	obs_data_set_bool(data, "replace_system_cursor", replaceSystemCursor);
++	obs_data_set_bool(data, "click_sound", clickSound);
++	obs_data_set_double(data, "click_sound_volume_db", clickSoundVolumeDb);
  	obs_data_set_bool(data, "marker_only_on_click", true);
  	obs_data_set_int(data, "marker_color", (long long)markerColor);
  	obs_data_set_int(data, "marker_size", markerSize);
-@@ -1022,6 +1113,7 @@ void ZoominatorController::startZoomOut()
+@@ -1022,6 +1133,7 @@ void ZoominatorController::startZoomOut()
  		markerClickFlashHoldUntilMs = 0;
  		markerClickFlashFadeOutEndMs = 0;
  		markerClickHasPos = false;
@@ -285,7 +322,7 @@ index 255eba5..cdbd27d 100644
  	}
  	ensureTicking(true);
  }
-@@ -1436,6 +1528,56 @@ static std::wstring to_w(const QString &s)
+@@ -1436,6 +1548,56 @@ static std::wstring to_w(const QString &s)
  	return s.toStdWString();
  }
  
@@ -342,7 +379,7 @@ index 255eba5..cdbd27d 100644
  static bool get_process_exe_name(DWORD pid, QString &out)
  {
  	out.clear();
-@@ -1516,6 +1658,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1516,6 +1678,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  		return false;
  	const char *w = obs_data_get_string(s, "window");
  	QString sel = (w && *w) ? QString::fromUtf8(w) : QString();
@@ -350,7 +387,7 @@ index 255eba5..cdbd27d 100644
  	obs_data_release(s);
  
  	if (sel.isEmpty())
-@@ -1530,12 +1673,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1530,12 +1693,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  	ctx.wantExe = exe;
  
  	EnumWindows(enum_windows_cb, reinterpret_cast<LPARAM>(&ctx));
@@ -381,7 +418,7 @@ index 255eba5..cdbd27d 100644
  
  	rcOut = rc;
  	return true;
-@@ -1935,13 +2095,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
+@@ -1935,13 +2115,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
  }
  #endif
  
@@ -489,7 +526,7 @@ index 255eba5..cdbd27d 100644
  	int rx = 0, ry = 0, rw = 0, rh = 0;
  	if (!getSelectedScreenRect(rx, ry, rw, rh) || rw <= 0 || rh <= 0)
  		return false;
-@@ -2049,40 +2302,401 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
+@@ -2049,40 +2322,404 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
  	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
  }
  
@@ -502,7 +539,7 @@ index 255eba5..cdbd27d 100644
 -	const QString path = markerImagePath();
 -	if (path.isEmpty())
 +	if (!item)
- 		return;
++		return;
 +	const uint32_t topLeft = OBS_ALIGN_LEFT | OBS_ALIGN_TOP;
 +	if (obs_sceneitem_get_alignment(item) != topLeft)
 +		obs_sceneitem_set_alignment(item, topLeft);
@@ -519,7 +556,7 @@ index 255eba5..cdbd27d 100644
 +		s.y = scale;
 +		obs_sceneitem_set_scale(item, &s);
 +	}
- 
++
 +	obs_sceneitem_crop crop{};
 +	obs_sceneitem_get_crop(item, &crop);
 +	if (crop.left || crop.top || crop.right || crop.bottom) {
@@ -557,7 +594,7 @@ index 255eba5..cdbd27d 100644
 +static void reload_image_source(obs_source_t *source, const QString &path)
 +{
 +	if (!source || path.isEmpty())
-+		return;
+ 		return;
 +	obs_data_t *settings = obs_data_create();
 +	obs_data_set_string(settings, "file", path.toUtf8().constData());
 +	obs_data_set_bool(settings, "unload", false);
@@ -570,7 +607,7 @@ index 255eba5..cdbd27d 100644
 +	const double u = 1.0 - clampd(t, 0.0, 1.0);
 +	return 1.0 - u * u * u;
 +}
-+
+ 
 +/* Overlay art is specified in pixels of a 1080p canvas and scaled with the
 + * canvas height, so it keeps the same visual weight at 1440p or 4K. */
 +static double overlay_pixel_scale()
@@ -728,9 +765,7 @@ index 255eba5..cdbd27d 100644
 +	enhancedCursorSource = obs_source_create_private("image_source", kZoominatorEnhancedCursorSourceName, settings);
 +	obs_data_release(settings);
 +}
- 
--	QPainter painter(&img);
--	painter.setRenderHint(QPainter::Antialiasing, true);
++
 +obs_sceneitem_t *ZoominatorController::ensureEnhancedCursorItem(obs_scene_t *scene)
 +{
 +	if (!scene)
@@ -738,19 +773,10 @@ index 255eba5..cdbd27d 100644
 +	ensureEnhancedCursorSource();
 +	if (!enhancedCursorSource)
 +		return nullptr;
- 
--	QColor stroke = QColor::fromRgba(markerColor);
--	if (!stroke.isValid())
--		stroke = QColor(255, 0, 0, 255);
--	if (stroke.alpha() == 0)
--		stroke.setAlpha(255);
--	stroke.setAlpha(255);
++
 +	if (obs_sceneitem_t *found = find_overlay_item(scene, enhancedCursorSource))
 +		return found;
- 
--	const qreal thickness = std::clamp<qreal>((qreal)markerThickness, 1.0, std::max<qreal>(1.0, size / 2.0 - 2.0));
--	const qreal margin = thickness * 0.5 + 1.5;
--	const QRectF ringRect(margin, margin, size - margin * 2.0, size - margin * 2.0);
++
 +	obs_sceneitem_t *item = obs_scene_add(scene, enhancedCursorSource);
 +	if (item) {
 +		normalize_cursor_scene_item(item, 1.0f);
@@ -758,21 +784,14 @@ index 255eba5..cdbd27d 100644
 +	}
 +	return item;
 +}
- 
--	QPen ringPen(stroke);
--	ringPen.setWidthF(thickness);
--	ringPen.setCosmetic(true);
--	painter.setPen(ringPen);
--	painter.setBrush(Qt::NoBrush);
--	painter.drawEllipse(ringRect);
--	painter.end();
++
 +void ZoominatorController::hideEnhancedCursorInScene(obs_scene_t *scene)
 +{
 +	cursorSmoothValid = false;
 +	if (obs_sceneitem_t *item = find_overlay_item(scene, enhancedCursorSource))
 +		obs_sceneitem_set_visible(item, false);
 +}
- 
++
 +bool ZoominatorController::drawsCursorOverlay() const
 +{
 +	return showCursorMarker && showMarkerWhenNotZoomed && replaceSystemCursor;
@@ -803,7 +822,9 @@ index 255eba5..cdbd27d 100644
 +		downMs = pointerDownMs;
 +		upMs = pointerUpMs;
 +	}
-+
+ 
+-	QPainter painter(&img);
+-	painter.setRenderHint(QPainter::Antialiasing, true);
 +	auto pressed = [](double heldMs) {
 +		return 1.0 + (kCursorPressScale - 1.0) * ease_out_cubic(heldMs / kCursorPressMs);
 +	};
@@ -822,13 +843,22 @@ index 255eba5..cdbd27d 100644
 +	       (1.0 - kCursorOvershootScale) *
 +		       smoothstep((t - kCursorOvershootMs) / (kCursorReleaseMs - kCursorOvershootMs));
 +}
-+
+ 
+-	QColor stroke = QColor::fromRgba(markerColor);
+-	if (!stroke.isValid())
+-		stroke = QColor(255, 0, 0, 255);
+-	if (stroke.alpha() == 0)
+-		stroke.setAlpha(255);
+-	stroke.setAlpha(255);
 +void ZoominatorController::updateEnhancedCursorPosition(obs_scene_t *scene, double x, double y)
 +{
 +	obs_sceneitem_t *item = ensureEnhancedCursorItem(scene);
 +	if (!item)
 +		return;
-+
+ 
+-	const qreal thickness = std::clamp<qreal>((qreal)markerThickness, 1.0, std::max<qreal>(1.0, size / 2.0 - 2.0));
+-	const qreal margin = thickness * 0.5 + 1.5;
+-	const QRectF ringRect(margin, margin, size - margin * 2.0, size - margin * 2.0);
 +	/* ~60ms of critically damped smoothing irons out jitter and stair-stepped
 +	 * mouse reports. Jumps (re-entry, scene switch) snap. Click feedback uses
 +	 * the real click coordinates, never this smoothed point. */
@@ -854,7 +884,14 @@ index 255eba5..cdbd27d 100644
 +		step(cursorSmoothY, cursorVelY, y);
 +	}
 +	cursorSmoothLastMs = nowMs;
-+
+ 
+-	QPen ringPen(stroke);
+-	ringPen.setWidthF(thickness);
+-	ringPen.setCosmetic(true);
+-	painter.setPen(ringPen);
+-	painter.setBrush(Qt::NoBrush);
+-	painter.drawEllipse(ringRect);
+-	painter.end();
 +	const double scale = pointerPressScale(nowMs);
 +	normalize_cursor_scene_item(item, (float)scale);
 +	vec2 pos{};
@@ -865,7 +902,7 @@ index 255eba5..cdbd27d 100644
 +		obs_sceneitem_set_visible(item, true);
 +	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
 +}
-+
+ 
 +void ZoominatorController::rebuildMarkerImage()
 +{
 +	const QString path = markerImagePath();
@@ -873,15 +910,15 @@ index 255eba5..cdbd27d 100644
 +		return;
 +	ensure_parent_dir_exists(path);
 +
-+	/* Click pulse, inner layer: a soft neutral disc drawn once at its largest
-+	 * radius; the scene item scale grows it. Grey-blue reads on light pages
-+	 * and dark editors alike. */
++	/* Click pulse, inner layer: a soft coral disc drawn once at its largest
++	 * radius; the scene item scale grows it. The warm coral sits apart from
++	 * the blue and green most interfaces use for buttons and links. */
 +	const double k = overlay_pixel_scale();
 +	const double r = kClickFillEndRadius * k;
 +	const int size = (int)std::ceil(r * 2.0) + 4;
 +	const QImage img = render_supersampled(size, size, [&](QPainter &p) {
 +		p.setPen(Qt::NoPen);
-+		p.setBrush(QColor(110, 120, 140));
++		p.setBrush(QColor(255, 122, 89));
 +		p.drawEllipse(QPointF(size * 0.5, size * 0.5), r, r);
 +	});
 +	img.save(path, "PNG");
@@ -894,28 +931,31 @@ index 255eba5..cdbd27d 100644
 +		return;
 +	ensure_parent_dir_exists(path);
 +
-+	/* Click pulse, outer layer: a 2px white ring with a 1px dark edge on each
-+	 * side so it still reads on white pages, not just dark editors. */
++	/* Click pulse, outer layer: a 2.5px coral ring with a 1px white highlight
++	 * hugging its inner edge at 70% of the ring's strength, so the ring still
++	 * separates from a saturated blue button underneath. */
 +	const double k = overlay_pixel_scale();
 +	const double r = kClickRingDrawRadius * k;
-+	const double line = 2.0 * k;
-+	const int size = (int)std::ceil((r + line * 2.0) * 2.0) + 4;
++	const double line = 2.5 * k;
++	const double highlight = 1.0 * k;
++	const int size = (int)std::ceil((r + line) * 2.0) + 4;
 +	const QPointF center(size * 0.5, size * 0.5);
 +	const QImage img = render_supersampled(size, size, [&](QPainter &p) {
 +		p.setBrush(Qt::NoBrush);
-+		QPen edge(QColor(0, 0, 0, 100));
-+		edge.setWidthF(line + 2.0 * k);
-+		p.setPen(edge);
-+		p.drawEllipse(center, r, r);
-+		QPen ring(Qt::white);
++		QPen ring(QColor(255, 122, 89));
 +		ring.setWidthF(line);
 +		p.setPen(ring);
 +		p.drawEllipse(center, r, r);
++		const double innerR = r - line * 0.5 - highlight * 0.5;
++		QPen glint(QColor(255, 255, 255, 179));
++		glint.setWidthF(highlight);
++		p.setPen(glint);
++		p.drawEllipse(center, innerR, innerR);
 +	});
  	img.save(path, "PNG");
  }
  
-@@ -2133,7 +2747,7 @@ void ZoominatorController::ensureMarkerSource()
+@@ -2133,7 +2770,7 @@ void ZoominatorController::ensureMarkerSource()
  	if (markerSource)
  		return;
  
@@ -924,7 +964,7 @@ index 255eba5..cdbd27d 100644
  
  	const QString path = markerImagePath();
  	if (path.isEmpty())
-@@ -2224,27 +2838,151 @@ void ZoominatorController::hideMarkerInScene(obs_scene_t *scene)
+@@ -2224,95 +2861,327 @@ void ZoominatorController::hideMarkerInScene(obs_scene_t *scene)
  		obs_sceneitem_set_visible(finder.found, false);
  }
  
@@ -974,9 +1014,10 @@ index 255eba5..cdbd27d 100644
 +		obs_sceneitem_set_visible(ring, false);
 +}
 +
-+/* Click feedback, about half a second in total: an inner disc grows 13 -> 30px
-+ * while fading from 32% over 450ms, and a thin ring grows 24 -> 42px while
-+ * fading from 42% over 500ms. Both ease out from the real click point. */
++/* Click feedback, about half a second in total: an inner coral disc grows
++ * 13 -> 30px while fading from 26% over 450ms, and a coral ring grows
++ * 24 -> 42px while fading from 80% over 500ms. Both ease out from the real
++ * click point. */
 +void ZoominatorController::updateClickFeedback(obs_scene_t *scene, double x, double y, qint64 nowMs)
 +{
 +	const double elapsed = (double)(nowMs - markerClickFlashStartMs);
@@ -1024,6 +1065,89 @@ index 255eba5..cdbd27d 100644
 +	pos.x = (float)x;
 +	pos.y = (float)y;
 +	obs_sceneitem_set_pos(ring, &pos);
++}
++
++/* Returns a new reference to the click sound media source, creating it on
++ * first use and parking it in the hidden audio bus scene, which every display
++ * scene nests, so the click is recorded wherever the arrow is drawn. It has no
++ * video, monitoring stays off so the presenter does not hear it while
++ * talking, and it feeds track 1 (the mix) and track 4 (clicks only). */
++obs_source_t *ZoominatorController::acquireClickSoundSource()
++{
++	char *file = obs_module_file(kZoominatorClickSoundFile);
++	if (!file) {
++		if (debug)
++			blog(LOG_WARNING, "[Zoominator] Click sound '%s' is not installed", kZoominatorClickSoundFile);
++		return nullptr;
++	}
++	const std::string path(file);
++	bfree(file);
++
++	obs_source_t *source = obs_get_source_by_name(kZoominatorClickSoundSourceName);
++	obs_data_t *current = source ? obs_source_get_settings(source) : nullptr;
++	const char *currentFile = current ? obs_data_get_string(current, "local_file") : nullptr;
++	const bool needsSettings = !source || !currentFile || path != currentFile;
++	if (current)
++		obs_data_release(current);
++
++	if (needsSettings) {
++		obs_data_t *settings = obs_data_create();
++		obs_data_set_bool(settings, "is_local_file", true);
++		obs_data_set_string(settings, "local_file", path.c_str());
++		obs_data_set_bool(settings, "looping", false);
++		obs_data_set_bool(settings, "restart_on_activate", false);
++		obs_data_set_bool(settings, "close_when_inactive", false);
++		obs_data_set_bool(settings, "clear_on_media_end", true);
++		obs_data_set_bool(settings, "hw_decode", false);
++		if (source)
++			obs_source_update(source, settings);
++		else
++			source = obs_source_create("ffmpeg_source", kZoominatorClickSoundSourceName, settings, nullptr);
++		obs_data_release(settings);
++		if (!source)
++			return nullptr;
++	}
++
++	if (obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE)
++		obs_source_set_monitoring_type(source, OBS_MONITORING_TYPE_NONE);
++	if (obs_source_get_audio_mixers(source) != kClickSoundMixers)
++		obs_source_set_audio_mixers(source, kClickSoundMixers);
++	const float volume = (float)std::pow(10.0, clickSoundVolumeDb / 20.0);
++	if (std::fabs(obs_source_get_volume(source) - volume) > 0.0001f)
++		obs_source_set_volume(source, volume);
++
++	obs_source_t *bus = obs_get_source_by_name(kZoominatorAudioBusSceneName);
++	if (obs_scene_t *busScene = bus ? obs_scene_from_source(bus) : nullptr) {
++		obs_sceneitem_t *item = find_overlay_item(busScene, source);
++		if (!item)
++			item = obs_scene_add(busScene, source);
++		if (item && !obs_sceneitem_visible(item))
++			obs_sceneitem_set_visible(item, true);
++	} else if (debug) {
++		blog(LOG_WARNING, "[Zoominator] Audio bus scene not found; click sound will not be recorded");
++	}
++	if (bus)
++		obs_source_release(bus);
++	return source;
++}
++
++void ZoominatorController::prepareClickSound()
++{
++	if (shuttingDown || !clickSound || !drawsCursorOverlay())
++		return;
++	if (obs_source_t *source = acquireClickSoundSource())
++		obs_source_release(source);
++}
++
++void ZoominatorController::playClickSound()
++{
++	if (!clickSound)
++		return;
++	obs_source_t *source = acquireClickSoundSource();
++	if (!source)
++		return;
++	obs_source_media_restart(source);
++	obs_source_release(source);
 +}
 +
 +/* The system cursor and the drawn arrow must never both be in the picture, and
@@ -1087,8 +1211,10 @@ index 255eba5..cdbd27d 100644
 +	}
  }
  
- bool ZoominatorController::captureMarkerClickPosition()
-@@ -2253,66 +2991,82 @@ bool ZoominatorController::captureMarkerClickPosition()
+-bool ZoominatorController::captureMarkerClickPosition()
++bool ZoominatorController::captureMarkerClickPosition(bool withSound)
+ {
+ 	if (!showCursorMarker || !markerOnlyOnClick)
  		return false;
  
  	int cx = 0, cy = 0;
@@ -1098,10 +1224,10 @@ index 255eba5..cdbd27d 100644
 -	if (!mapped || !inside)
 +	if (!getCursorPos(cx, cy))
 +		return false;
-+	return captureMarkerClickPosition(cx, cy);
++	return captureMarkerClickPosition(cx, cy, withSound);
 +}
 +
-+bool ZoominatorController::captureMarkerClickPosition(int cursorX, int cursorY)
++bool ZoominatorController::captureMarkerClickPosition(int cursorX, int cursorY, bool withSound)
 +{
 +	if (!showCursorMarker || !markerOnlyOnClick)
  		return false;
@@ -1122,6 +1248,7 @@ index 255eba5..cdbd27d 100644
 +		markerClickScreenY = cursorY;
 +		markerClickCapturedAtMs = QDateTime::currentMSecsSinceEpoch();
 +		markerClickPending = true;
++		markerClickPendingSound = withSound;
  	}
 -	ensureTicking(true);
 +	QMetaObject::invokeMethod(this, [this]() {
@@ -1136,6 +1263,7 @@ index 255eba5..cdbd27d 100644
 +	int cursorX = 0;
 +	int cursorY = 0;
 +	qint64 capturedAtMs = 0;
++	bool withSound = false;
 +	{
 +		std::lock_guard<std::mutex> lock(inputMutex);
 +		if (!markerClickPending)
@@ -1143,6 +1271,7 @@ index 255eba5..cdbd27d 100644
 +		cursorX = markerClickScreenX;
 +		cursorY = markerClickScreenY;
 +		capturedAtMs = markerClickCapturedAtMs;
++		withSound = markerClickPendingSound;
 +		markerClickPending = false;
 +	}
 +
@@ -1150,6 +1279,11 @@ index 255eba5..cdbd27d 100644
 +	bool inside = false;
 +	if (!mapCursorToScenePixels(cursorX, cursorY, mx, my, inside) || !inside)
 +		return;
++
++	/* Only real mouse presses on a capture that shows the drawn arrow sound;
++	 * hotkeys and the zoom gesture never do. */
++	if (withSound && drawsCursorOverlay())
++		playClickSound();
 +
 +	const qint64 nowMs = std::max(capturedAtMs, QDateTime::currentMSecsSinceEpoch());
 +	std::lock_guard<std::mutex> lock(inputMutex);
@@ -1206,7 +1340,7 @@ index 255eba5..cdbd27d 100644
  {
  	if (!showCursorMarker)
  		return;
-@@ -2327,13 +3081,17 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+@@ -2327,13 +3196,17 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
  	if (!item)
  		return;
  
@@ -1225,7 +1359,7 @@ index 255eba5..cdbd27d 100644
  
  	vec2 pos{};
  	pos.x = (float)x;
-@@ -2353,6 +3111,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
+@@ -2353,6 +3226,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
  	OrigState orig = readSceneItemTransform(item);
  	if (!orig.valid)
  		return;
@@ -1233,7 +1367,7 @@ index 255eba5..cdbd27d 100644
  
  	float renderedW = 0.0f;
  	float renderedH = 0.0f;
-@@ -2612,14 +3371,86 @@ void ZoominatorController::applyZoomToScene(double t)
+@@ -2612,14 +3486,86 @@ void ZoominatorController::applyZoomToScene(double t)
  	const double marginRatio = (double)edgeOverflowMarginPct / 100.0;
  	const bool allowOverflow = edgeOverflowMarginPct > 0;
  
@@ -1326,7 +1460,7 @@ index 255eba5..cdbd27d 100644
  				const double dx = (double)mx - (double)followX;
  				const double dy = (double)my - (double)followY;
  				const double dist = std::sqrt(dx * dx + dy * dy);
-@@ -2646,18 +3477,16 @@ void ZoominatorController::applyZoomToScene(double t)
+@@ -2646,18 +3592,16 @@ void ZoominatorController::applyZoomToScene(double t)
  				anchorX = followX;
  				anchorY = followY;
  			}
@@ -1353,7 +1487,7 @@ index 255eba5..cdbd27d 100644
  		if (!targetHasPos) {
  			if (zoomAnchor == ZoomAnchorMode::CanvasCenter) {
  				/* The cursor must not influence the zoom at all - not even
-@@ -2682,9 +3511,14 @@ void ZoominatorController::applyZoomToScene(double t)
+@@ -2682,9 +3626,14 @@ void ZoominatorController::applyZoomToScene(double t)
  		}
  		fx = targetX;
  		fy = targetY;
@@ -1369,7 +1503,7 @@ index 255eba5..cdbd27d 100644
  		} else {
  			anchorX = (float)centerX;
  			anchorY = (float)centerY;
-@@ -2700,10 +3534,6 @@ void ZoominatorController::applyZoomToScene(double t)
+@@ -2700,10 +3649,6 @@ void ZoominatorController::applyZoomToScene(double t)
  		}
  	}
  
@@ -1380,7 +1514,7 @@ index 255eba5..cdbd27d 100644
  	const double refMinX = (double)anchorX + (baseMinX - (double)fx) * z;
  	const double refMaxX = (double)anchorX + (baseMaxX - (double)fx) * z;
  	const double refMinY = (double)anchorY + (baseMinY - (double)fy) * z;
-@@ -2713,9 +3543,6 @@ void ZoominatorController::applyZoomToScene(double t)
+@@ -2713,9 +3658,6 @@ void ZoominatorController::applyZoomToScene(double t)
  	const double minOffsetY = ch - refMaxY;
  	const double maxOffsetY = -refMinY;
  
@@ -1390,7 +1524,7 @@ index 255eba5..cdbd27d 100644
  	const double minOffsetXClamped = minOffsetX - overflowLimitX;
  	const double maxOffsetXClamped = maxOffsetX + overflowLimitX;
  	const double minOffsetYClamped = minOffsetY - overflowLimitY;
-@@ -2813,8 +3640,10 @@ void ZoominatorController::onTick()
+@@ -2813,8 +3755,10 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -1402,7 +1536,7 @@ index 255eba5..cdbd27d 100644
  		ensureTicking(false);
  		return;
  	}
-@@ -2828,19 +3657,28 @@ void ZoominatorController::onTick()
+@@ -2828,19 +3772,28 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -1428,18 +1562,18 @@ index 255eba5..cdbd27d 100644
 +			/* Click feedback first so the arrow, raised last, stays on top. */
 +			if (showCursorMarker && clickFeedbackAlive(nowMs))
 +				updateClickFeedback(scene, markerClickX, markerClickY, nowMs);
- 			else
--				hideMarkerInScene(scene);
++			else
 +				hideClickFeedbackInScene(scene);
 +
 +			if (persistentCursorWanted && cursorMapped && cursorInside)
 +				updateEnhancedCursorPosition(scene, cursorSceneX, cursorSceneY);
-+			else
+ 			else
+-				hideMarkerInScene(scene);
 +				hideEnhancedCursorInScene(scene);
  		}
  		if (sceneSource)
  			obs_source_release(sceneSource);
-@@ -2850,7 +3688,8 @@ void ZoominatorController::onTick()
+@@ -2850,7 +3803,8 @@ void ZoominatorController::onTick()
  			markerClickFlashStartMs = 0;
  			markerClickFlashHoldUntilMs = 0;
  			markerClickFlashFadeOutEndMs = 0;
@@ -1449,7 +1583,7 @@ index 255eba5..cdbd27d 100644
  		}
  		return;
  	}
-@@ -2862,8 +3701,8 @@ void ZoominatorController::onTick()
+@@ -2862,8 +3816,8 @@ void ZoominatorController::onTick()
  			if (debug)
  				blog(LOG_WARNING, "[Zoominator] No movable scene items in current scene.");
  			tickingWanted.store(false, std::memory_order_release);
@@ -1459,7 +1593,7 @@ index 255eba5..cdbd27d 100644
  			return;
  		}
  
-@@ -2877,6 +3716,12 @@ void ZoominatorController::onTick()
+@@ -2877,6 +3831,12 @@ void ZoominatorController::onTick()
  	}
  
  	obs_source_t *sceneSource = obs_frontend_get_current_scene();
@@ -1472,7 +1606,7 @@ index 255eba5..cdbd27d 100644
  
  	/* All marker scene-graph mutation happens here, on the main thread, using
  	 * the placement the graphics tick published. */
-@@ -2890,21 +3735,21 @@ void ZoominatorController::onTick()
+@@ -2890,21 +3850,21 @@ void ZoominatorController::onTick()
  			markerY = pendingMarkerY;
  		}
  
@@ -1505,7 +1639,7 @@ index 255eba5..cdbd27d 100644
  
  	obs_source_t *previousRef = nullptr;
  	{
-@@ -2984,8 +3829,8 @@ void ZoominatorController::finishZoomOnMainThread()
+@@ -2984,8 +3944,8 @@ void ZoominatorController::finishZoomOnMainThread()
  	restoringRecovery = false;
  	clearRecoveryActive();
  	tickingWanted.store(false, std::memory_order_release);
@@ -1515,7 +1649,7 @@ index 255eba5..cdbd27d 100644
  
  	obs_source_t *staleRef = nullptr;
  	{
-@@ -3283,7 +4128,12 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
+@@ -3283,7 +4243,12 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
  		}
  
  		if (down)
@@ -1529,7 +1663,7 @@ index 255eba5..cdbd27d 100644
  
  		if (g_ctl->triggerType == "mouse" && (down || up)) {
  			if (mods_current(g_ctl->modCtrl, g_ctl->modAlt, g_ctl->modShift, g_ctl->modWin,
-@@ -3453,6 +4303,8 @@ CGEventRef ZoominatorController::eventTapCallback(CGEventTapProxy proxy, CGEvent
+@@ -3453,6 +4418,8 @@ CGEventRef ZoominatorController::eventTapCallback(CGEventTapProxy proxy, CGEvent
  
  	if (isMouseDown)
  		ctl->captureMarkerClickPosition();
@@ -1538,7 +1672,7 @@ index 255eba5..cdbd27d 100644
  
  	if (ctl->triggerType == "mouse") {
  		if (isMouseDown || isMouseUp) {
-@@ -3742,15 +4594,28 @@ void ZoominatorController::toggleFollowMouseRuntime()
+@@ -3742,15 +4709,28 @@ void ZoominatorController::toggleFollowMouseRuntime()
  		return;
  	}
  
@@ -1573,7 +1707,7 @@ index 255eba5..cdbd27d 100644
  	if (debug) {
  		blog(LOG_INFO, "[Zoominator] Follow mouse %s", followMouseRuntimeEnabled ? "ENABLED" : "DISABLED");
 diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
-index 053750f..b9dbc11 100644
+index 053750f..fb43a0b 100644
 --- a/src/zoominator-controller.hpp
 +++ b/src/zoominator-controller.hpp
 @@ -2,6 +2,7 @@
@@ -1584,15 +1718,16 @@ index 053750f..b9dbc11 100644
  
  #include <QObject>
  #include <QPointer>
-@@ -55,6 +56,7 @@ public:
+@@ -55,6 +56,8 @@ public:
  	void loadSettings();
  	void notifySettingsChanged();
  	void rebuildRuntimeHooks();
 +	void syncCaptureCursorSetting();
++	void prepareClickSound();
  
  	QString screenKey;
  	QString hotkeySequence;
-@@ -86,12 +88,15 @@ public:
+@@ -86,12 +89,17 @@ public:
  	ZoomAnchorMode zoomAnchor = ZoomAnchorMode::CursorFollow;
  	bool followMouseRuntimeEnabled = true;
  	double followSpeed = 8.0;
@@ -1605,10 +1740,12 @@ index 053750f..b9dbc11 100644
  	bool showCursorMarker = false;
  	bool showMarkerWhenNotZoomed = false;
 +	bool replaceSystemCursor = true;
++	bool clickSound = true;
++	double clickSoundVolumeDb = 0.0;
  	bool markerOnlyOnClick = true;
  	uint32_t markerColor = 0xFFFF0000;
  	int markerSize = 26;
-@@ -138,7 +143,8 @@ private:
+@@ -138,7 +146,8 @@ private:
  	void enumerateTargetItemsInCurrentScene(std::vector<obs_sceneitem_t *> &items) const;
  
  	bool getCursorPos(int &x, int &y) const;
@@ -1618,7 +1755,7 @@ index 053750f..b9dbc11 100644
  
  	void captureOriginal(obs_sceneitem_t *item);
  	void restoreOriginal(obs_sceneitem_t *item);
-@@ -146,17 +152,33 @@ private:
+@@ -146,17 +155,35 @@ private:
  	void restoreOriginalSceneItems(const std::vector<obs_sceneitem_t *> &items);
  	void restoreOriginalSceneItemsFromState();
  	QString markerImagePath() const;
@@ -1636,6 +1773,7 @@ index 053750f..b9dbc11 100644
  	void applyMarkerOpacity(int opacity255);
 -	void updateMarkerAppearance();
 -	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255);
+-	bool captureMarkerClickPosition();
 +	QString clickRingImagePath() const;
 +	void rebuildClickRingImage();
 +	void refreshOverlayImages();
@@ -1647,15 +1785,17 @@ index 053750f..b9dbc11 100644
 +	void notifyPointerButton(bool down);
 +	double pointerPressScale(qint64 nowMs);
 +	void updateMarkerPosition(obs_scene_t *scene, double x, double y, int opacity255, double scale);
- 	bool captureMarkerClickPosition();
-+	bool captureMarkerClickPosition(int cursorX, int cursorY);
++	bool captureMarkerClickPosition(bool withSound = true);
++	bool captureMarkerClickPosition(int cursorX, int cursorY, bool withSound = true);
++	obs_source_t *acquireClickSoundSource();
++	void playClickSound();
 +	void resolvePendingMarkerClick();
  	bool isMarkerFlashActive(qint64 nowMs) const;
 -	int currentMarkerOpacity(qint64 nowMs);
  	void applyZoomToScene(double t);
  
  	/* Split loop. Frame-critical work runs on OBS's graphics thread via
-@@ -209,6 +231,11 @@ private:
+@@ -209,6 +236,11 @@ private:
  	bool followHasPos = false;
  	float followX = 0.0f;
  	float followY = 0.0f;
@@ -1667,11 +1807,12 @@ index 053750f..b9dbc11 100644
  	bool lastCursorSampleValid = false;
  	float lastCursorSampleX = 0.0f;
  	float lastCursorSampleY = 0.0f;
-@@ -226,9 +253,27 @@ private:
+@@ -226,9 +258,28 @@ private:
  	float targetY = 0.0f;
  
  	bool markerClickHasPos = false;
 +	bool markerClickPending = false;
++	bool markerClickPendingSound = false;
 +	int markerClickScreenX = 0;
 +	int markerClickScreenY = 0;
 +	qint64 markerClickCapturedAtMs = 0;
@@ -1696,7 +1837,7 @@ index 053750f..b9dbc11 100644
  	int markerCurrentOpacity = -1;
  	obs_source_t *markerFilter = nullptr;
  	qint64 markerClickFlashStartMs = 0;
-@@ -247,6 +292,7 @@ private:
+@@ -247,6 +298,7 @@ private:
  		obs_sceneitem_crop crop{};
  		vec2 effectivePos{};
  		vec2 effectiveScale{};
@@ -1704,7 +1845,7 @@ index 053750f..b9dbc11 100644
  	};
  
  	struct SceneItemState {
-@@ -269,6 +315,8 @@ private:
+@@ -269,6 +321,8 @@ private:
  	void clearRecoveryActive();
  	void requestRecoveryRestore();
  	static void frontendEventCallback(enum obs_frontend_event event, void *data);
@@ -1713,7 +1854,7 @@ index 053750f..b9dbc11 100644
  
  	std::vector<SceneItemState> sceneItems;
  	QHash<QString, OrigState> recoveryTransforms;
-@@ -282,6 +330,9 @@ private:
+@@ -282,6 +336,9 @@ private:
  
  	QPointer<ZoominatorDialog> dialog;
  	obs_source_t *markerSource = nullptr;
@@ -1724,7 +1865,7 @@ index 053750f..b9dbc11 100644
  	int hotkeyVk = 0;
  	bool hkValid = false;
 diff --git a/src/zoominator-dialog.cpp b/src/zoominator-dialog.cpp
-index e10acf4..c86588f 100644
+index e10acf4..247ac59 100644
 --- a/src/zoominator-dialog.cpp
 +++ b/src/zoominator-dialog.cpp
 @@ -409,6 +409,19 @@ void ZoominatorDialog::buildUi()
@@ -1781,7 +1922,7 @@ index e10acf4..c86588f 100644
  		syncFollowOnlyFields();
  
  		addSection(lay, T("Dialog.Section.Canvas"));
-@@ -477,12 +504,16 @@ void ZoominatorDialog::buildUi()
+@@ -477,12 +504,33 @@ void ZoominatorDialog::buildUi()
  		btnMarkerColor = new QPushButton(page);
  		btnMarkerColor->setMinimumHeight(28);
  
@@ -1801,10 +1942,27 @@ index e10acf4..c86588f 100644
 +		chkReplaceSystemCursor = new QCheckBox(T("Dialog.ReplaceSystemCursor"), page);
 +		chkReplaceSystemCursor->setToolTip(T("Dialog.ReplaceSystemCursorTooltip"));
 +		lay->addWidget(chkReplaceSystemCursor);
++
++		chkClickSound = new QCheckBox(T("Dialog.ClickSound"), page);
++		chkClickSound->setToolTip(T("Dialog.ClickSoundTooltip"));
++		spClickSoundVolume = new QDoubleSpinBox(page);
++		spClickSoundVolume->setRange(-40.0, 12.0);
++		spClickSoundVolume->setSingleStep(1.0);
++		spClickSoundVolume->setDecimals(1);
++		spClickSoundVolume->setSuffix(QStringLiteral(" dB"));
++		spClickSoundVolume->setToolTip(T("Dialog.ClickSoundVolumeTooltip"));
++
++		auto *clickSoundRow = new QHBoxLayout;
++		clickSoundRow->setSpacing(12);
++		clickSoundRow->addWidget(chkClickSound, 1);
++		clickSoundRow->addWidget(mkField(T("Dialog.ClickSoundVolume"), spClickSoundVolume), 1);
++		clickSoundRow->addStretch(1);
++		lay->addLayout(clickSoundRow);
++		connect(chkClickSound, &QCheckBox::toggled, spClickSoundVolume, &QWidget::setEnabled);
  
  		addSection(lay, T("Dialog.Section.Developer"));
  
-@@ -536,6 +567,7 @@ void ZoominatorDialog::buildUi()
+@@ -536,6 +584,7 @@ void ZoominatorDialog::buildUi()
  	connect(btnClearFollowToggleHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearFollowToggleHotkey);
  	connect(btnMarkerColor, &QPushButton::clicked, this, &ZoominatorDialog::chooseMarkerColor);
  	connect(chkShowCursorMarker, &QCheckBox::toggled, chkShowMarkerWhenNotZoomed, &QWidget::setEnabled);
@@ -1812,7 +1970,7 @@ index e10acf4..c86588f 100644
  }
  
  void ZoominatorDialog::populateSourcesTab()
-@@ -725,6 +757,8 @@ void ZoominatorDialog::loadFromController()
+@@ -725,6 +774,8 @@ void ZoominatorDialog::loadFromController()
  			cmbZoomAnchor->findData(ZoominatorController::zoomAnchorModeToString(c.zoomAnchor));
  		cmbZoomAnchor->setCurrentIndex(anchorIdx >= 0 ? anchorIdx : 2);
  		spFollowSpeed->setValue(c.followSpeed);
@@ -1821,16 +1979,19 @@ index e10acf4..c86588f 100644
  		chkCenterCursorUntilEdge->setChecked(c.centerCursorUntilEdge);
  		spEdgeOverflowMargin->setValue(c.edgeOverflowMarginPct);
  		spMouseIdleTimeout->setValue(c.mouseIdleTimeoutMs);
-@@ -732,6 +766,8 @@ void ZoominatorDialog::loadFromController()
+@@ -732,6 +783,11 @@ void ZoominatorDialog::loadFromController()
  		chkShowCursorMarker->setChecked(c.showCursorMarker);
  		chkShowMarkerWhenNotZoomed->setChecked(c.showMarkerWhenNotZoomed);
  		chkShowMarkerWhenNotZoomed->setEnabled(c.showCursorMarker);
 +		chkReplaceSystemCursor->setChecked(c.replaceSystemCursor);
 +		chkReplaceSystemCursor->setEnabled(c.showCursorMarker);
++		chkClickSound->setChecked(c.clickSound);
++		spClickSoundVolume->setValue(c.clickSoundVolumeDb);
++		spClickSoundVolume->setEnabled(c.clickSound);
  		spMarkerSize->setValue(c.markerSize);
  		spMarkerThickness->setValue(c.markerThickness);
  		updateMarkerColorButton(QColor::fromRgba(c.markerColor));
-@@ -783,12 +819,15 @@ void ZoominatorDialog::applyToController()
+@@ -783,12 +839,17 @@ void ZoominatorDialog::applyToController()
  	c.animOutMs = spOut->value();
  	c.zoomAnchor = ZoominatorController::zoomAnchorModeFromString(cmbZoomAnchor->currentData().toString());
  	c.followSpeed = spFollowSpeed->value();
@@ -1843,22 +2004,25 @@ index e10acf4..c86588f 100644
  	c.showCursorMarker = chkShowCursorMarker->isChecked();
  	c.showMarkerWhenNotZoomed = chkShowMarkerWhenNotZoomed->isChecked();
 +	c.replaceSystemCursor = chkReplaceSystemCursor->isChecked();
++	c.clickSound = chkClickSound->isChecked();
++	c.clickSoundVolumeDb = spClickSoundVolume->value();
  	c.markerOnlyOnClick = true;
  	c.markerSize = spMarkerSize->value();
  	c.markerThickness = spMarkerThickness->value();
-@@ -807,6 +846,7 @@ void ZoominatorDialog::applyToController()
+@@ -807,6 +868,8 @@ void ZoominatorDialog::applyToController()
  
  	c.saveSettings();
  	c.rebuildRuntimeHooks();
 +	c.syncCaptureCursorSetting();
++	c.prepareClickSound();
  	lblStatus->setText(T("Dialog.SettingsApplied"));
  }
  
 diff --git a/src/zoominator-dialog.hpp b/src/zoominator-dialog.hpp
-index 7815744..6054802 100644
+index 7815744..75bb54e 100644
 --- a/src/zoominator-dialog.hpp
 +++ b/src/zoominator-dialog.hpp
-@@ -73,12 +73,15 @@ private:
+@@ -73,12 +73,17 @@ private:
  	QSpinBox *spOut = nullptr;
  	QComboBox *cmbZoomAnchor = nullptr;
  	QDoubleSpinBox *spFollowSpeed = nullptr;
@@ -1871,6 +2035,8 @@ index 7815744..6054802 100644
  	QCheckBox *chkShowCursorMarker = nullptr;
  	QCheckBox *chkShowMarkerWhenNotZoomed = nullptr;
 +	QCheckBox *chkReplaceSystemCursor = nullptr;
++	QCheckBox *chkClickSound = nullptr;
++	QDoubleSpinBox *spClickSoundVolume = nullptr;
  	QSpinBox *spMarkerSize = nullptr;
  	QSpinBox *spMarkerThickness = nullptr;
  	QPushButton *btnMarkerColor = nullptr;

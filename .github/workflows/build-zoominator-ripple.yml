@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - plugin/zoominator-ripple.patch
+      - assets/sounds/**
       - .github/workflows/build-zoominator-ripple.yml
 
 permissions:
@@ -25,6 +26,12 @@ jobs:
       - name: Apply gentle ripple patch
         shell: pwsh
         run: git -C zoominator apply "$env:GITHUB_WORKSPACE\plugin\zoominator-ripple.patch"
+
+      - name: Bundle click sound
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\zoominator\data\sounds | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\assets\sounds\zoominator-click.wav" .\zoominator\data\sounds\
 
       - name: Build Release plugin
         shell: pwsh

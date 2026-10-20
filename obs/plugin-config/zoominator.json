@@ -37,6 +37,8 @@
   "show_cursor_marker": true,
   "show_marker_when_not_zoomed": true,
   "replace_system_cursor": true,
+  "click_sound": true,
+  "click_sound_volume_db": 0.0,
   "marker_only_on_click": true,
   "marker_color": 4285173759,
   "marker_size": 56,

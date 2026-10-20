@@ -65,17 +65,17 @@ try {
 
     Copy-Item -LiteralPath $source -Destination $destination -Force
 
-    # 对话框里的新设置项需要同版本的语言文件，否则会显示原始键名。
-    $localeSource = Join-Path $extractPath 'data\obs-plugins\zoominator\locale'
-    if (Test-Path -LiteralPath $localeSource) {
-        $localeDestination = Join-Path $ObsInstallRoot 'data\obs-plugins\zoominator\locale'
-        New-Item -ItemType Directory -Force -Path $localeDestination | Out-Null
-        Copy-Item -Path (Join-Path $localeSource '*.ini') -Destination $localeDestination -Force
-        Write-Host "语言文件已更新：$localeDestination"
+    # 插件数据要和 DLL 同版本：缺语言文件时设置项会显示原始键名，缺音效文件时点击不会发声。
+    $dataSource = Join-Path $extractPath 'data\obs-plugins\zoominator'
+    if (Test-Path -LiteralPath $dataSource) {
+        $dataDestination = Join-Path $ObsInstallRoot 'data\obs-plugins\zoominator'
+        New-Item -ItemType Directory -Force -Path $dataDestination | Out-Null
+        Copy-Item -Path (Join-Path $dataSource '*') -Destination $dataDestination -Recurse -Force
+        Write-Host "插件数据（语言文件、点击音效）已更新：$dataDestination"
     }
 
     $dllHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-    Write-Host '增强版 Zoominator 安装完成（干净光标、点击反馈、死区跟随）。' -ForegroundColor Green
+    Write-Host '增强版 Zoominator 安装完成（干净光标、点击反馈与音效、死区跟随）。' -ForegroundColor Green
     Write-Host "插件路径：$destination"
     Write-Host "DLL SHA256：$dllHash"
 } finally {
