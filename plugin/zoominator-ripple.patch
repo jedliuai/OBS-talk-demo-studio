@@ -1,5 +1,35 @@
+diff --git a/data/locale/en-US.ini b/data/locale/en-US.ini
+index f43a77e..985f353 100644
+--- a/data/locale/en-US.ini
++++ b/data/locale/en-US.ini
+@@ -59,6 +59,10 @@ Dialog.ZoomAnchor.CursorStatic="Cursor position (static)"
+ Dialog.ZoomAnchor.CursorFollow="Cursor position (follow)"
+ Dialog.ZoomAnchorTooltip="Canvas center ignores the cursor. Static zooms around wherever the cursor was when the zoom was triggered, then holds still. Follow keeps tracking the cursor while it stays inside the captured region."
+ Dialog.SmoothingSpeed="Smoothing Speed"
++Dialog.FollowDeadzone="Follow Deadzone"
++Dialog.FollowDeadzoneTooltip="Size of the central safe box, as a share of the zoomed view. While the cursor moves inside it the view stays still; only when the cursor reaches the edge band does the view glide just far enough to bring it back. Disabled uses the classic continuous smoothing."
++Dialog.FollowSpring="Follow Glide Time"
++Dialog.FollowSpringTooltip="Roughly how long the deadzone camera takes to settle after the cursor reaches the edge band. Larger values glide more slowly and softly, without overshoot."
+ Dialog.CenterCursorUntilEdge="Keep cursor centered until the capture reaches an edge"
+ Dialog.CenterCursorUntilEdgeTooltip="Maps the full captured monitor to the full captured scene content, which improves ultrawide tracking and clamps only when an edge is reached."
+ Dialog.EdgeOverflowMargin="Edge Overflow Margin"
+diff --git a/data/locale/zh-CN.ini b/data/locale/zh-CN.ini
+index b647d0c..26105da 100644
+--- a/data/locale/zh-CN.ini
++++ b/data/locale/zh-CN.ini
+@@ -60,6 +60,10 @@ Dialog.ShowHaloWhenNotZoomedTooltip="在缩放效果不活动时也显示点击
+ Dialog.ShowOnlyOnClick="仅点击时显示"
+ Dialog.ShowOnlyOnClickTooltip="启用后，光环会在点击位置闪烁，而不是持续跟随光标。"
+ Dialog.SmoothingSpeed="平滑速度"
++Dialog.FollowDeadzone="跟随死区"
++Dialog.FollowDeadzoneTooltip="放大画面中间安全框占可视区域的比例。鼠标在安全框内移动时画面完全不动，只有进入边缘带时才平滑平移到刚好让鼠标回到安全框内。关闭则使用原来的连续平滑跟随。"
++Dialog.FollowSpring="跟随滑动时长"
++Dialog.FollowSpringTooltip="鼠标进入边缘带后，画面平移大约多久稳定下来。数值越大越慢越柔和，不会冲过头。"
+ Dialog.SourcesHelp="<b>勾选</b>要包含在缩放效果中的源。<br><b>未勾选</b>的源会保持固定，例如摄像头叠层或水印。<br>新源默认未勾选，直到你手动启用。"
+ Dialog.StatusTip="提示：选择用于驱动场景移动的显示器。"
+ Dialog.SupportMessage="<b>谢谢，Zoominator 已正式超过 20,000 次下载！</b><br>随着我维护这个插件和其他免费资源，GitHub Actions、托管和开发成本正在增加。如果您想提供帮助，您可以选择通过 <a href='https://www.paypal.com/donate/?hosted_button_id=ZKTLLYY9ADWYQ'>$3 小费通过 PayPal</a>，这将非常有意义，但绝对没有任何义务。"
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..c54133e 100644
+index 255eba5..7fe1b84 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
 @@ -2,6 +2,8 @@
@@ -100,7 +130,38 @@ index 255eba5..c54133e 100644
  void ZoominatorController::showDialog()
  {
  	if (!dialog) {
-@@ -1022,6 +1067,7 @@ void ZoominatorController::startZoomOut()
+@@ -661,6 +706,8 @@ void ZoominatorController::loadSettings()
+ 	zoomAnchor = ZoomAnchorMode::CursorFollow;
+ 	followMouseRuntimeEnabled = true;
+ 	followSpeed = 8.0;
++	followDeadzonePct = 60;
++	followSpringMs = 450;
+ 	centerCursorUntilEdge = true;
+ 	edgeOverflowMarginPct = 0;
+ 	mouseIdleTimeoutMs = 0;
+@@ -842,6 +889,12 @@ void ZoominatorController::loadSettings()
+ 		followSpeed = obs_data_get_double(data, "follow_speed");
+ 	if (followSpeed <= 0.1)
+ 		followSpeed = 8.0;
++	if (obs_data_has_user_value(data, "follow_deadzone_pct"))
++		followDeadzonePct = (int)obs_data_get_int(data, "follow_deadzone_pct");
++	followDeadzonePct = std::clamp(followDeadzonePct, 0, 90);
++	if (obs_data_has_user_value(data, "follow_spring_ms"))
++		followSpringMs = (int)obs_data_get_int(data, "follow_spring_ms");
++	followSpringMs = std::clamp(followSpringMs, 50, 3000);
+ 	if (obs_data_has_user_value(data, "center_cursor_until_edge"))
+ 		centerCursorUntilEdge = obs_data_get_bool(data, "center_cursor_until_edge");
+ 	if (obs_data_has_user_value(data, "edge_overflow_margin_pct"))
+@@ -945,6 +998,8 @@ void ZoominatorController::saveSettings()
+ 	obs_data_set_bool(data, "follow_mouse", zoomAnchor == ZoomAnchorMode::CursorFollow);
+ 	followMouseRuntimeEnabled = true;
+ 	obs_data_set_double(data, "follow_speed", followSpeed);
++	obs_data_set_int(data, "follow_deadzone_pct", followDeadzonePct);
++	obs_data_set_int(data, "follow_spring_ms", followSpringMs);
+ 	obs_data_set_bool(data, "center_cursor_until_edge", centerCursorUntilEdge);
+ 	obs_data_set_int(data, "edge_overflow_margin_pct", edgeOverflowMarginPct);
+ 	obs_data_set_bool(data, "allow_canvas_overflow", edgeOverflowMarginPct > 0);
+@@ -1022,6 +1077,7 @@ void ZoominatorController::startZoomOut()
  		markerClickFlashHoldUntilMs = 0;
  		markerClickFlashFadeOutEndMs = 0;
  		markerClickHasPos = false;
@@ -108,7 +169,7 @@ index 255eba5..c54133e 100644
  	}
  	ensureTicking(true);
  }
-@@ -1436,6 +1482,56 @@ static std::wstring to_w(const QString &s)
+@@ -1436,6 +1492,56 @@ static std::wstring to_w(const QString &s)
  	return s.toStdWString();
  }
  
@@ -165,7 +226,7 @@ index 255eba5..c54133e 100644
  static bool get_process_exe_name(DWORD pid, QString &out)
  {
  	out.clear();
-@@ -1516,6 +1612,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1516,6 +1622,7 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  		return false;
  	const char *w = obs_data_get_string(s, "window");
  	QString sel = (w && *w) ? QString::fromUtf8(w) : QString();
@@ -173,7 +234,7 @@ index 255eba5..c54133e 100644
  	obs_data_release(s);
  
  	if (sel.isEmpty())
-@@ -1530,12 +1627,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
+@@ -1530,12 +1637,29 @@ static bool match_window_rect_for_source(obs_source_t *src, RECT &rcOut)
  	ctx.wantExe = exe;
  
  	EnumWindows(enum_windows_cb, reinterpret_cast<LPARAM>(&ctx));
@@ -204,7 +265,7 @@ index 255eba5..c54133e 100644
  
  	rcOut = rc;
  	return true;
-@@ -1935,13 +2049,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
+@@ -1935,13 +2059,106 @@ static bool match_window_rect_for_source(obs_source_t *src, LinuxRect &rcOut)
  }
  #endif
  
@@ -312,7 +373,7 @@ index 255eba5..c54133e 100644
  	int rx = 0, ry = 0, rw = 0, rh = 0;
  	if (!getSelectedScreenRect(rx, ry, rw, rh) || rw <= 0 || rh <= 0)
  		return false;
-@@ -2049,6 +2256,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
+@@ -2049,6 +2266,139 @@ static void normalize_marker_scene_item(obs_sceneitem_t *item)
  	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
  }
  
@@ -452,7 +513,7 @@ index 255eba5..c54133e 100644
  void ZoominatorController::rebuildMarkerImage()
  {
  	const int size = std::clamp(markerSize, 6, 512);
-@@ -2071,16 +2411,25 @@ void ZoominatorController::rebuildMarkerImage()
+@@ -2071,16 +2421,25 @@ void ZoominatorController::rebuildMarkerImage()
  		stroke.setAlpha(255);
  	stroke.setAlpha(255);
  
@@ -486,7 +547,7 @@ index 255eba5..c54133e 100644
  	painter.end();
  
  	img.save(path, "PNG");
-@@ -2253,29 +2602,63 @@ bool ZoominatorController::captureMarkerClickPosition()
+@@ -2253,29 +2612,63 @@ bool ZoominatorController::captureMarkerClickPosition()
  		return false;
  
  	int cx = 0, cy = 0;
@@ -565,7 +626,7 @@ index 255eba5..c54133e 100644
  bool ZoominatorController::isMarkerFlashActive(qint64 nowMs) const
  {
  	return showCursorMarker && markerOnlyOnClick && markerClickHasPos && markerClickFlashFadeOutEndMs > 0 &&
-@@ -2287,7 +2670,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2287,7 +2680,7 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	if (!showCursorMarker || !markerOnlyOnClick || !markerClickHasPos)
  		return 0;
  
@@ -574,7 +635,7 @@ index 255eba5..c54133e 100644
  	if (markerClickFlashFadeOutEndMs <= 0 || nowMs >= markerClickFlashFadeOutEndMs) {
  		std::lock_guard<std::mutex> lock(inputMutex);
  		markerClickHasPos = false;
-@@ -2312,7 +2695,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
+@@ -2312,7 +2705,19 @@ int ZoominatorController::currentMarkerOpacity(qint64 nowMs)
  	return (int)std::round((1.0 - smoothstep(tOut)) * 255.0);
  }
  
@@ -595,7 +656,7 @@ index 255eba5..c54133e 100644
  {
  	if (!showCursorMarker)
  		return;
-@@ -2334,6 +2729,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
+@@ -2334,6 +2739,10 @@ void ZoominatorController::updateMarkerPosition(obs_scene_t *scene, double x, do
  		return;
  
  	normalize_marker_scene_item(item);
@@ -606,7 +667,7 @@ index 255eba5..c54133e 100644
  
  	vec2 pos{};
  	pos.x = (float)x;
-@@ -2353,6 +2752,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
+@@ -2353,6 +2762,7 @@ void ZoominatorController::captureOriginal(obs_sceneitem_t *item)
  	OrigState orig = readSceneItemTransform(item);
  	if (!orig.valid)
  		return;
@@ -614,7 +675,164 @@ index 255eba5..c54133e 100644
  
  	float renderedW = 0.0f;
  	float renderedH = 0.0f;
-@@ -2813,8 +3213,10 @@ void ZoominatorController::onTick()
+@@ -2612,14 +3022,86 @@ void ZoominatorController::applyZoomToScene(double t)
+ 	const double marginRatio = (double)edgeOverflowMarginPct / 100.0;
+ 	const bool allowOverflow = edgeOverflowMarginPct > 0;
+ 
++	const double baseMinX = sceneContentBoundsValid ? (double)sceneContentMin.x : 0.0;
++	const double baseMinY = sceneContentBoundsValid ? (double)sceneContentMin.y : 0.0;
++	const double baseMaxX = sceneContentBoundsValid ? (double)sceneContentMax.x : cw;
++	const double baseMaxY = sceneContentBoundsValid ? (double)sceneContentMax.y : ch;
++	const double overflowLimitX = cw * marginRatio;
++	const double overflowLimitY = ch * marginRatio;
++
++	/* Deadzone follow. The pivot (followX/Y) decides which part of the scene is
++	 * visible once the zoom has settled. The camera holds still while the cursor
++	 * stays inside the central safe box of the view it is heading to; when the
++	 * cursor enters the edge band, the goal view shifts just far enough to put
++	 * the cursor back on the box edge, and a critically damped spring glides the
++	 * pivot there without overshoot. */
++	const bool useDeadzone = followDeadzonePct > 0 && zTarget > 1.001;
++	const double safeFrac = clampd((double)followDeadzonePct / 100.0, 0.0, 0.95);
++	auto pivotToViewMin = [&](double pivot, double extent) {
++		return allowOverflow ? pivot - extent / (2.0 * zTarget) : pivot * (1.0 - 1.0 / zTarget);
++	};
++	auto viewMinToPivot = [&](double viewMin, double extent) {
++		return allowOverflow ? viewMin + extent / (2.0 * zTarget) : viewMin / (1.0 - 1.0 / zTarget);
++	};
++	auto deadzoneGoal = [&](double goal, double cursor, double extent, double contentMin, double contentMax,
++				double overflowPx) {
++		const double viewSize = extent / zTarget;
++		const double safeLo = viewSize * (1.0 - safeFrac) * 0.5;
++		const double safeHi = viewSize - safeLo;
++		double viewMin = pivotToViewMin(goal, extent);
++		if (cursor < viewMin + safeLo)
++			viewMin = cursor - safeLo;
++		else if (cursor > viewMin + safeHi)
++			viewMin = cursor - safeHi;
++		/* Never aim past what the offset clamp below can show, or the camera
++		 * would sit dead until the cursor walked the goal back. */
++		const double lo = contentMin - overflowPx / zTarget;
++		const double hi = contentMax + overflowPx / zTarget - viewSize;
++		viewMin = (lo <= hi) ? clampd(viewMin, lo, hi) : (lo + hi) * 0.5;
++		return viewMinToPivot(viewMin, extent);
++	};
++	auto springStep = [&](float &pos, double &vel, double goal) {
++		/* Exact critically damped step: stable for any frame delta, about 90%
++		 * settled after followSpringMs. */
++		const double omega = 4000.0 / (double)std::max(1, followSpringMs);
++		const double dt = tickDeltaSeconds;
++		const double e0 = (double)pos - goal;
++		const double c = vel + omega * e0;
++		const double decay = std::exp(-omega * dt);
++		const double e1 = (e0 + c * dt) * decay;
++		vel = (vel - omega * c * dt) * decay;
++		if (std::fabs(e1) < 0.05 && std::fabs(vel) < 0.5) {
++			pos = (float)goal;
++			vel = 0.0;
++		} else {
++			pos = (float)(goal + e1);
++		}
++	};
++
+ 	if (zoomAnchor == ZoomAnchorMode::CursorFollow && followMouseRuntimeEnabled && !mouseTrackingIdle) {
+ 		targetHasPos = false;
+-		if (mapped) {
+-			if (!followHasPos) {
+-				followX = mx;
+-				followY = my;
+-				followHasPos = true;
+-			} else {
++		if (mapped && !followHasPos) {
++			followX = mx;
++			followY = my;
++			followHasPos = true;
++			followGoalValid = false;
++		}
++		if (followHasPos) {
++			if (useDeadzone) {
++				if (!followGoalValid) {
++					followGoalX = followX;
++					followGoalY = followY;
++					followVelX = 0.0;
++					followVelY = 0.0;
++					followGoalValid = true;
++				}
++				if (mapped) {
++					followGoalX = deadzoneGoal(followGoalX, mx, cw, baseMinX, baseMaxX, overflowLimitX);
++					followGoalY = deadzoneGoal(followGoalY, my, ch, baseMinY, baseMaxY, overflowLimitY);
++				}
++				springStep(followX, followVelX, followGoalX);
++				springStep(followY, followVelY, followGoalY);
++			} else if (mapped) {
+ 				const double dx = (double)mx - (double)followX;
+ 				const double dy = (double)my - (double)followY;
+ 				const double dist = std::sqrt(dx * dx + dy * dy);
+@@ -2646,18 +3128,16 @@ void ZoominatorController::applyZoomToScene(double t)
+ 				anchorX = followX;
+ 				anchorY = followY;
+ 			}
+-		} else if (followHasPos) {
+-			fx = followX;
+-			fy = followY;
+-			if (allowOverflow) {
+-				anchorX = (float)((double)followX + ((double)centerX - (double)followX) * tt);
+-				anchorY = (float)((double)followY + ((double)centerY - (double)followY) * tt);
+-			} else {
+-				anchorX = followX;
+-				anchorY = followY;
+-			}
+ 		}
+ 	} else {
++		/* Follow paused (runtime toggle or idle timeout). The spring restarts
++		 * from rest at the held pivot when following resumes. */
++		const bool frozenFollow = zoomAnchor == ZoomAnchorMode::CursorFollow;
++		if (frozenFollow) {
++			followVelX = 0.0;
++			followVelY = 0.0;
++			followGoalValid = false;
++		}
+ 		if (!targetHasPos) {
+ 			if (zoomAnchor == ZoomAnchorMode::CanvasCenter) {
+ 				/* The cursor must not influence the zoom at all - not even
+@@ -2682,9 +3162,14 @@ void ZoominatorController::applyZoomToScene(double t)
+ 		}
+ 		fx = targetX;
+ 		fy = targetY;
+-		if (allowOverflow && zoomAnchor == ZoomAnchorMode::CursorStatic) {
++		if (allowOverflow && (zoomAnchor == ZoomAnchorMode::CursorStatic || frozenFollow)) {
+ 			anchorX = (float)((double)targetX + ((double)centerX - (double)targetX) * tt);
+ 			anchorY = (float)((double)targetY + ((double)centerY - (double)targetY) * tt);
++		} else if (frozenFollow) {
++			/* Same anchor the follow branch uses, so pausing and resuming
++			 * never jumps the view. */
++			anchorX = targetX;
++			anchorY = targetY;
+ 		} else {
+ 			anchorX = (float)centerX;
+ 			anchorY = (float)centerY;
+@@ -2700,10 +3185,6 @@ void ZoominatorController::applyZoomToScene(double t)
+ 		}
+ 	}
+ 
+-	const double baseMinX = sceneContentBoundsValid ? (double)sceneContentMin.x : 0.0;
+-	const double baseMinY = sceneContentBoundsValid ? (double)sceneContentMin.y : 0.0;
+-	const double baseMaxX = sceneContentBoundsValid ? (double)sceneContentMax.x : cw;
+-	const double baseMaxY = sceneContentBoundsValid ? (double)sceneContentMax.y : ch;
+ 	const double refMinX = (double)anchorX + (baseMinX - (double)fx) * z;
+ 	const double refMaxX = (double)anchorX + (baseMaxX - (double)fx) * z;
+ 	const double refMinY = (double)anchorY + (baseMinY - (double)fy) * z;
+@@ -2713,9 +3194,6 @@ void ZoominatorController::applyZoomToScene(double t)
+ 	const double minOffsetY = ch - refMaxY;
+ 	const double maxOffsetY = -refMinY;
+ 
+-	const double overflowLimitX = cw * marginRatio;
+-	const double overflowLimitY = ch * marginRatio;
+-
+ 	const double minOffsetXClamped = minOffsetX - overflowLimitX;
+ 	const double maxOffsetXClamped = maxOffsetX + overflowLimitX;
+ 	const double minOffsetYClamped = minOffsetY - overflowLimitY;
+@@ -2813,8 +3291,10 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -626,7 +844,7 @@ index 255eba5..c54133e 100644
  		ensureTicking(false);
  		return;
  	}
-@@ -2828,17 +3230,26 @@ void ZoominatorController::onTick()
+@@ -2828,17 +3308,26 @@ void ZoominatorController::onTick()
  		return;
  	}
  
@@ -658,7 +876,7 @@ index 255eba5..c54133e 100644
  			else
  				hideMarkerInScene(scene);
  		}
-@@ -2850,7 +3261,8 @@ void ZoominatorController::onTick()
+@@ -2850,7 +3339,8 @@ void ZoominatorController::onTick()
  			markerClickFlashStartMs = 0;
  			markerClickFlashHoldUntilMs = 0;
  			markerClickFlashFadeOutEndMs = 0;
@@ -668,7 +886,7 @@ index 255eba5..c54133e 100644
  		}
  		return;
  	}
-@@ -2862,8 +3274,8 @@ void ZoominatorController::onTick()
+@@ -2862,8 +3352,8 @@ void ZoominatorController::onTick()
  			if (debug)
  				blog(LOG_WARNING, "[Zoominator] No movable scene items in current scene.");
  			tickingWanted.store(false, std::memory_order_release);
@@ -678,7 +896,7 @@ index 255eba5..c54133e 100644
  			return;
  		}
  
-@@ -2877,10 +3289,21 @@ void ZoominatorController::onTick()
+@@ -2877,10 +3367,21 @@ void ZoominatorController::onTick()
  	}
  
  	obs_source_t *sceneSource = obs_frontend_get_current_scene();
@@ -700,7 +918,7 @@ index 255eba5..c54133e 100644
  		bool markerVisible = false;
  		double markerX = 0.0, markerY = 0.0;
  		{
-@@ -2891,9 +3314,10 @@ void ZoominatorController::onTick()
+@@ -2891,9 +3392,10 @@ void ZoominatorController::onTick()
  		}
  
  		if (showCursorMarker && markerVisible) {
@@ -713,7 +931,7 @@ index 255eba5..c54133e 100644
  			else
  				hideMarkerInScene(sc);
  		} else if (showCursorMarker) {
-@@ -2901,10 +3325,9 @@ void ZoominatorController::onTick()
+@@ -2901,10 +3403,9 @@ void ZoominatorController::onTick()
  		}
  	}
  
@@ -725,7 +943,7 @@ index 255eba5..c54133e 100644
  
  	obs_source_t *previousRef = nullptr;
  	{
-@@ -2984,8 +3407,8 @@ void ZoominatorController::finishZoomOnMainThread()
+@@ -2984,8 +3485,8 @@ void ZoominatorController::finishZoomOnMainThread()
  	restoringRecovery = false;
  	clearRecoveryActive();
  	tickingWanted.store(false, std::memory_order_release);
@@ -735,7 +953,7 @@ index 255eba5..c54133e 100644
  
  	obs_source_t *staleRef = nullptr;
  	{
-@@ -3283,7 +3706,10 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
+@@ -3283,7 +3784,10 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
  		}
  
  		if (down)
@@ -747,8 +965,42 @@ index 255eba5..c54133e 100644
  
  		if (g_ctl->triggerType == "mouse" && (down || up)) {
  			if (mods_current(g_ctl->modCtrl, g_ctl->modAlt, g_ctl->modShift, g_ctl->modWin,
+@@ -3742,15 +4246,28 @@ void ZoominatorController::toggleFollowMouseRuntime()
+ 		return;
+ 	}
+ 
++	/* Hand the held point between the follow pivot and the frozen target in
++	 * both directions so toggling never jumps the view. */
+ 	followMouseRuntimeEnabled = !followMouseRuntimeEnabled;
+-	if (!followMouseRuntimeEnabled && followHasPos) {
+-		targetX = followX;
+-		targetY = followY;
+-		targetHasPos = true;
++	if (!followMouseRuntimeEnabled) {
++		if (followHasPos) {
++			targetX = followX;
++			targetY = followY;
++			targetHasPos = true;
++		} else {
++			targetHasPos = false;
++		}
+ 	} else {
++		if (targetHasPos) {
++			followX = targetX;
++			followY = targetY;
++			followHasPos = true;
++		}
+ 		targetHasPos = false;
+ 	}
+-	followHasPos = false;
++	followGoalValid = false;
++	followVelX = 0.0;
++	followVelY = 0.0;
+ 
+ 	if (debug) {
+ 		blog(LOG_INFO, "[Zoominator] Follow mouse %s", followMouseRuntimeEnabled ? "ENABLED" : "DISABLED");
 diff --git a/src/zoominator-controller.hpp b/src/zoominator-controller.hpp
-index 053750f..c9f408f 100644
+index 053750f..cb9ddcc 100644
 --- a/src/zoominator-controller.hpp
 +++ b/src/zoominator-controller.hpp
 @@ -2,6 +2,7 @@
@@ -759,7 +1011,16 @@ index 053750f..c9f408f 100644
  
  #include <QObject>
  #include <QPointer>
-@@ -138,7 +139,8 @@ private:
+@@ -86,6 +87,8 @@ public:
+ 	ZoomAnchorMode zoomAnchor = ZoomAnchorMode::CursorFollow;
+ 	bool followMouseRuntimeEnabled = true;
+ 	double followSpeed = 8.0;
++	int followDeadzonePct = 60;
++	int followSpringMs = 450;
+ 	bool centerCursorUntilEdge = true;
+ 	int edgeOverflowMarginPct = 0;
+ 	int mouseIdleTimeoutMs = 0;
+@@ -138,7 +141,8 @@ private:
  	void enumerateTargetItemsInCurrentScene(std::vector<obs_sceneitem_t *> &items) const;
  
  	bool getCursorPos(int &x, int &y) const;
@@ -769,7 +1030,7 @@ index 053750f..c9f408f 100644
  
  	void captureOriginal(obs_sceneitem_t *item);
  	void restoreOriginal(obs_sceneitem_t *item);
-@@ -146,17 +148,26 @@ private:
+@@ -146,17 +150,26 @@ private:
  	void restoreOriginalSceneItems(const std::vector<obs_sceneitem_t *> &items);
  	void restoreOriginalSceneItemsFromState();
  	QString markerImagePath() const;
@@ -797,7 +1058,19 @@ index 053750f..c9f408f 100644
  	void applyZoomToScene(double t);
  
  	/* Split loop. Frame-critical work runs on OBS's graphics thread via
-@@ -226,6 +237,10 @@ private:
+@@ -209,6 +222,11 @@ private:
+ 	bool followHasPos = false;
+ 	float followX = 0.0f;
+ 	float followY = 0.0f;
++	bool followGoalValid = false;
++	double followGoalX = 0.0;
++	double followGoalY = 0.0;
++	double followVelX = 0.0;
++	double followVelY = 0.0;
+ 	bool lastCursorSampleValid = false;
+ 	float lastCursorSampleX = 0.0f;
+ 	float lastCursorSampleY = 0.0f;
+@@ -226,6 +244,10 @@ private:
  	float targetY = 0.0f;
  
  	bool markerClickHasPos = false;
@@ -808,7 +1081,7 @@ index 053750f..c9f408f 100644
  	float markerClickX = 0.0f;
  	float markerClickY = 0.0f;
  	uint32_t markerAppearanceHash = 0;
-@@ -247,6 +262,7 @@ private:
+@@ -247,6 +269,7 @@ private:
  		obs_sceneitem_crop crop{};
  		vec2 effectivePos{};
  		vec2 effectiveScale{};
@@ -816,7 +1089,7 @@ index 053750f..c9f408f 100644
  	};
  
  	struct SceneItemState {
-@@ -269,6 +285,8 @@ private:
+@@ -269,6 +292,8 @@ private:
  	void clearRecoveryActive();
  	void requestRecoveryRestore();
  	static void frontendEventCallback(enum obs_frontend_event event, void *data);
@@ -825,7 +1098,7 @@ index 053750f..c9f408f 100644
  
  	std::vector<SceneItemState> sceneItems;
  	QHash<QString, OrigState> recoveryTransforms;
-@@ -282,6 +300,9 @@ private:
+@@ -282,6 +307,9 @@ private:
  
  	QPointer<ZoominatorDialog> dialog;
  	obs_source_t *markerSource = nullptr;
@@ -835,3 +1108,92 @@ index 053750f..c9f408f 100644
  
  	int hotkeyVk = 0;
  	bool hkValid = false;
+diff --git a/src/zoominator-dialog.cpp b/src/zoominator-dialog.cpp
+index e10acf4..04c6e93 100644
+--- a/src/zoominator-dialog.cpp
++++ b/src/zoominator-dialog.cpp
+@@ -409,6 +409,19 @@ void ZoominatorDialog::buildUi()
+ 		spEdgeOverflowMargin->setSpecialValueText(T("Dialog.EdgeOverflow.Disabled"));
+ 		spEdgeOverflowMargin->setToolTip(T("Dialog.EdgeOverflowMarginTooltip"));
+ 
++		spFollowDeadzone = new QSpinBox(page);
++		spFollowDeadzone->setRange(0, 90);
++		spFollowDeadzone->setSingleStep(5);
++		spFollowDeadzone->setSuffix(T("Unit.Percent"));
++		spFollowDeadzone->setSpecialValueText(T("Dialog.Disabled"));
++		spFollowDeadzone->setToolTip(T("Dialog.FollowDeadzoneTooltip"));
++
++		spFollowSpring = new QSpinBox(page);
++		spFollowSpring->setRange(50, 3000);
++		spFollowSpring->setSingleStep(50);
++		spFollowSpring->setSuffix(T("Unit.Milliseconds"));
++		spFollowSpring->setToolTip(T("Dialog.FollowSpringTooltip"));
++
+ 		spMouseIdleTimeout = new QSpinBox(page);
+ 		spMouseIdleTimeout->setRange(0, 60000);
+ 		spMouseIdleTimeout->setSingleStep(100);
+@@ -424,6 +437,13 @@ void ZoominatorDialog::buildUi()
+ 		followRow->addWidget(mkField(T("Dialog.MouseIdleTimeout"), spMouseIdleTimeout), 1);
+ 		lay->addLayout(followRow);
+ 
++		auto *deadzoneRow = new QHBoxLayout;
++		deadzoneRow->setSpacing(12);
++		deadzoneRow->addWidget(mkField(T("Dialog.FollowDeadzone"), spFollowDeadzone), 1);
++		deadzoneRow->addWidget(mkField(T("Dialog.FollowSpring"), spFollowSpring), 1);
++		deadzoneRow->addStretch(1);
++		lay->addLayout(deadzoneRow);
++
+ 		auto *overflowRow = new QHBoxLayout;
+ 		overflowRow->setSpacing(12);
+ 		overflowRow->addWidget(mkField(T("Dialog.EdgeOverflowMargin"), spEdgeOverflowMargin), 1);
+@@ -436,11 +456,18 @@ void ZoominatorDialog::buildUi()
+ 		 * actually tracks the cursor. */
+ 		auto syncFollowOnlyFields = [this]() {
+ 			const bool follows = (cmbZoomAnchor->currentData().toString() == "cursor_follow");
+-			spFollowSpeed->setEnabled(follows);
++			const bool deadzone = spFollowDeadzone->value() > 0;
++			/* The legacy smoothing speed only drives the camera when the
++			 * deadzone is off; the spring takes over otherwise. */
++			spFollowSpeed->setEnabled(follows && !deadzone);
++			spFollowDeadzone->setEnabled(follows);
++			spFollowSpring->setEnabled(follows && deadzone);
+ 			spMouseIdleTimeout->setEnabled(follows);
+ 		};
+ 		connect(cmbZoomAnchor, &QComboBox::currentIndexChanged, this,
+ 			[syncFollowOnlyFields](int) { syncFollowOnlyFields(); });
++		connect(spFollowDeadzone, &QSpinBox::valueChanged, this,
++			[syncFollowOnlyFields](int) { syncFollowOnlyFields(); });
+ 		syncFollowOnlyFields();
+ 
+ 		addSection(lay, T("Dialog.Section.Canvas"));
+@@ -725,6 +752,8 @@ void ZoominatorDialog::loadFromController()
+ 			cmbZoomAnchor->findData(ZoominatorController::zoomAnchorModeToString(c.zoomAnchor));
+ 		cmbZoomAnchor->setCurrentIndex(anchorIdx >= 0 ? anchorIdx : 2);
+ 		spFollowSpeed->setValue(c.followSpeed);
++		spFollowDeadzone->setValue(c.followDeadzonePct);
++		spFollowSpring->setValue(c.followSpringMs);
+ 		chkCenterCursorUntilEdge->setChecked(c.centerCursorUntilEdge);
+ 		spEdgeOverflowMargin->setValue(c.edgeOverflowMarginPct);
+ 		spMouseIdleTimeout->setValue(c.mouseIdleTimeoutMs);
+@@ -783,6 +812,8 @@ void ZoominatorDialog::applyToController()
+ 	c.animOutMs = spOut->value();
+ 	c.zoomAnchor = ZoominatorController::zoomAnchorModeFromString(cmbZoomAnchor->currentData().toString());
+ 	c.followSpeed = spFollowSpeed->value();
++	c.followDeadzonePct = spFollowDeadzone->value();
++	c.followSpringMs = spFollowSpring->value();
+ 	c.centerCursorUntilEdge = chkCenterCursorUntilEdge->isChecked();
+ 	c.edgeOverflowMarginPct = spEdgeOverflowMargin->value();
+ 	c.mouseIdleTimeoutMs = spMouseIdleTimeout->value();
+diff --git a/src/zoominator-dialog.hpp b/src/zoominator-dialog.hpp
+index 7815744..2cd94dd 100644
+--- a/src/zoominator-dialog.hpp
++++ b/src/zoominator-dialog.hpp
+@@ -73,6 +73,8 @@ private:
+ 	QSpinBox *spOut = nullptr;
+ 	QComboBox *cmbZoomAnchor = nullptr;
+ 	QDoubleSpinBox *spFollowSpeed = nullptr;
++	QSpinBox *spFollowDeadzone = nullptr;
++	QSpinBox *spFollowSpring = nullptr;
+ 	QCheckBox *chkCenterCursorUntilEdge = nullptr;
+ 	QSpinBox *spEdgeOverflowMargin = nullptr;
+ 	QSpinBox *spMouseIdleTimeout = nullptr;

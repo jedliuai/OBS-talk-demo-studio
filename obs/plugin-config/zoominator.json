@@ -27,6 +27,8 @@
   "zoom_anchor": "cursor_follow",
   "follow_mouse": true,
   "follow_speed": 2.2,
+  "follow_deadzone_pct": 60,
+  "follow_spring_ms": 450,
   "center_cursor_until_edge": true,
   "edge_overflow_margin_pct": 0,
   "allow_canvas_overflow": false,
