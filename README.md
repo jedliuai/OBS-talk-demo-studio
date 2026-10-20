@@ -101,7 +101,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
 - 放大后「死区跟随」：鼠标在可视区域中间约 60% 的安全框里移动时画面不动，进入边缘带才用临界阻尼弹簧平滑平移，暂停或恢复跟随都不会跳；
 - GitHub Actions 自动从官方源码应用补丁并构建 Windows x64 版本。
 
-发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 v1.5.0 Release DLL 的 SHA256 为 `C9B31F56160D282DD18B9A7B8BB3F405B02E8C2F123A298F50293805C18D5F63`。
+发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 v1.6.0 Release DLL 的 SHA256 为 `B5A25BAC7012040CE9147BCFB8885C9F5BFEE6CB690CE0E0A982C962A39AA169`。
 
 这部分继承上游 GPL-2.0 许可。仓库不混入闭源二进制，构建过程可以逐行审计。
 
