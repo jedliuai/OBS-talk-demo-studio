@@ -97,6 +97,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
 - 120ms 淡入、90ms 短暂停留、1100ms 渐隐；
 - 使用捕获窗口客户区与 OBS 绘制矩阵校正点击坐标；
 - 在 OBS 画面内加入持续跟随的蓝白指针光环，不改动本机系统光标；
+- 放大后「死区跟随」：鼠标在可视区域中间约 60% 的安全框里移动时画面不动，进入边缘带才用临界阻尼弹簧平滑平移，暂停或恢复跟随都不会跳；
 - GitHub Actions 自动从官方源码应用补丁并构建 Windows x64 版本。
 
 发布包下载时会校验 SHA256，安装前自动备份现有 DLL。当前 v1.4.1 Release DLL 的 SHA256 为 `EF83A2BFAA1CBD9B9609A9FC0A908A6DF7F3A08A278CD1A0E2024E5FEDBCE804`。

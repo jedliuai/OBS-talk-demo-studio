@@ -46,7 +46,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1 -ObsInstallRoot "D:\Program Files\obs-studio"
 ```
 
-也可以从本仓库 Actions 的 `Build Zoominator Ripple` 工作流或 `v1.0.0` Release 手动下载 Windows x64 构建产物。将其中的 `zoominator.dll` 放入：
+脚本会自动从 OBS 安装器写入的注册表项识别安装目录，并同时更新插件的语言文件。
+
+也可以从本仓库 Actions 的 `Build Zoominator Ripple` 工作流或最新 Release 手动下载 Windows x64 构建产物。将其中的 `zoominator.dll` 放入：
 
 ```text
 <OBS 安装目录>\obs-plugins\64bit\zoominator.dll
@@ -59,7 +61,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-ripple-plugin.ps1 -Ob
 - `Alt + 1/2/3` 能否依次切换真人、带真人小窗的录屏和电脑全屏；
 - 在 `02` 中按 `Alt + Z` 时，是否只有软件内容在鼠标附近平滑放大，真人小窗与背景保持不动；
 - `Alt + Z` 能否再次按下后平滑恢复；
-- `Alt + X` 能否开关鼠标跟随；
+- 放大后在画面中间区域小范围移动鼠标，画面是否保持静止；把鼠标移到边缘时画面是否平滑滑过去、不冲过头；
+- `Alt + X` 能否开关鼠标跟随，开关瞬间画面不跳；
 - 悬浮控制条是否可以点击切场景，且不会出现在 OBS 画面中；
 - OBS 画面里的蓝白光标光环是否跟随准确，而本机系统光标外观不变；
 - 鼠标点击是否在实际点击位置出现更大、更慢的柔和扩散水波；

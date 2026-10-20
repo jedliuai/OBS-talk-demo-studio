@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string] $ObsInstallRoot = ''
 )
@@ -9,6 +9,14 @@ $expectedSha256 = '95A8DCB5F4F87C1ADA623517CC99B66FA01A627A6D512D44D669DFA9D73B6
 
 if (Get-Process -Name 'obs64' -ErrorAction SilentlyContinue) {
     throw 'OBS 正在运行。请先退出 OBS，再安装插件。'
+}
+
+if (-not $ObsInstallRoot) {
+    # OBS 安装器会把安装目录写进这个键的默认值；装在非 C 盘时卸载项里常常没有 InstallLocation。
+    $obsKey = Get-ItemProperty 'HKLM:\SOFTWARE\OBS Studio' -ErrorAction SilentlyContinue
+    if ($obsKey -and $obsKey.'(default)' -and (Test-Path -LiteralPath $obsKey.'(default)')) {
+        $ObsInstallRoot = $obsKey.'(default)'.TrimEnd('\')
+    }
 }
 
 if (-not $ObsInstallRoot) {
@@ -56,6 +64,16 @@ try {
     }
 
     Copy-Item -LiteralPath $source -Destination $destination -Force
+
+    # 对话框里的新设置项需要同版本的语言文件，否则会显示原始键名。
+    $localeSource = Join-Path $extractPath 'data\obs-plugins\zoominator\locale'
+    if (Test-Path -LiteralPath $localeSource) {
+        $localeDestination = Join-Path $ObsInstallRoot 'data\obs-plugins\zoominator\locale'
+        New-Item -ItemType Directory -Force -Path $localeDestination | Out-Null
+        Copy-Item -Path (Join-Path $localeSource '*.ini') -Destination $localeDestination -Force
+        Write-Host "语言文件已更新：$localeDestination"
+    }
+
     $dllHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
     Write-Host '水波版 Zoominator 安装完成。' -ForegroundColor Green
     Write-Host "插件路径：$destination"
