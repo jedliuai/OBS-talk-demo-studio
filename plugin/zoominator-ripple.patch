@@ -75,7 +75,7 @@ index b647d0c..8441f2f 100644
  Dialog.StatusTip="提示：选择用于驱动场景移动的显示器。"
  Dialog.SupportMessage="<b>谢谢，Zoominator 已正式超过 20,000 次下载！</b><br>随着我维护这个插件和其他免费资源，GitHub Actions、托管和开发成本正在增加。如果您想提供帮助，您可以选择通过 <a href='https://www.paypal.com/donate/?hosted_button_id=ZKTLLYY9ADWYQ'>$3 小费通过 PayPal</a>，这将非常有意义，但绝对没有任何义务。"
 diff --git a/src/zoominator-controller.cpp b/src/zoominator-controller.cpp
-index 255eba5..f7c9361 100644
+index 255eba5..cdbd27d 100644
 --- a/src/zoominator-controller.cpp
 +++ b/src/zoominator-controller.cpp
 @@ -2,6 +2,8 @@
@@ -113,7 +113,7 @@ index 255eba5..f7c9361 100644
 +static constexpr double kCursorReleaseMs = 180.0;
 +static constexpr double kClickFillStartRadius = 13.0;
 +static constexpr double kClickFillEndRadius = 30.0;
-+static constexpr double kClickFillOpacity = 0.26;
++static constexpr double kClickFillOpacity = 0.32;
 +static constexpr double kClickFillMs = 450.0;
 +static constexpr double kClickRingStartRadius = 24.0;
 +static constexpr double kClickRingEndRadius = 42.0;
@@ -894,8 +894,8 @@ index 255eba5..f7c9361 100644
 +		return;
 +	ensure_parent_dir_exists(path);
 +
-+	/* Click pulse, outer layer: a 2px white ring with a faint 1px dark edge on
-+	 * each side so it holds up on white backgrounds too. */
++	/* Click pulse, outer layer: a 2px white ring with a 1px dark edge on each
++	 * side so it still reads on white pages, not just dark editors. */
 +	const double k = overlay_pixel_scale();
 +	const double r = kClickRingDrawRadius * k;
 +	const double line = 2.0 * k;
@@ -903,7 +903,7 @@ index 255eba5..f7c9361 100644
 +	const QPointF center(size * 0.5, size * 0.5);
 +	const QImage img = render_supersampled(size, size, [&](QPainter &p) {
 +		p.setBrush(Qt::NoBrush);
-+		QPen edge(QColor(0, 0, 0, 64));
++		QPen edge(QColor(0, 0, 0, 100));
 +		edge.setWidthF(line + 2.0 * k);
 +		p.setPen(edge);
 +		p.drawEllipse(center, r, r);
@@ -975,7 +975,7 @@ index 255eba5..f7c9361 100644
 +}
 +
 +/* Click feedback, about half a second in total: an inner disc grows 13 -> 30px
-+ * while fading from 26% over 450ms, and a thin ring grows 24 -> 42px while
++ * while fading from 32% over 450ms, and a thin ring grows 24 -> 42px while
 + * fading from 42% over 500ms. Both ease out from the real click point. */
 +void ZoominatorController::updateClickFeedback(obs_scene_t *scene, double x, double y, qint64 nowMs)
 +{

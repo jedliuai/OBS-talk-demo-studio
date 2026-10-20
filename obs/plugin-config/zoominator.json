@@ -36,6 +36,7 @@
   "portrait_cover": true,
   "show_cursor_marker": true,
   "show_marker_when_not_zoomed": true,
+  "replace_system_cursor": true,
   "marker_only_on_click": true,
   "marker_color": 4285173759,
   "marker_size": 56,
