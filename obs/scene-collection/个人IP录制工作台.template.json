@@ -245,43 +245,6 @@
         },
         {
             "prev_ver": 537001986,
-            "name": "JED 品牌签名",
-            "uuid": "ffd017b4-89fd-489e-877d-84e320f2039c",
-            "id": "text_gdiplus",
-            "versioned_id": "text_gdiplus_v3",
-            "settings": {
-                "outline": true,
-                "text": "JED · AI X 外贸 实战",
-                "font": {
-                    "face": "Microsoft YaHei UI",
-                    "flags": 1,
-                    "size": 34
-                },
-                "color": 16777215,
-                "opacity": 92,
-                "outline_size": 2,
-                "outline_color": 1973790,
-                "outline_opacity": 55
-            },
-            "mixers": 0,
-            "sync": 0,
-            "flags": 0,
-            "volume": 1,
-            "balance": 0.5,
-            "enabled": true,
-            "muted": false,
-            "push-to-mute": false,
-            "push-to-mute-delay": 0,
-            "push-to-talk": false,
-            "push-to-talk-delay": 0,
-            "hotkeys": {},
-            "deinterlace_mode": 0,
-            "deinterlace_field_order": 0,
-            "monitoring_type": 0,
-            "private_settings": {}
-        },
-        {
-            "prev_ver": 537001986,
             "name": "摄像头圆形边框",
             "uuid": "9a904b41-22d6-4aad-852b-9df38c1d76f2",
             "id": "image_source",
@@ -336,48 +299,6 @@
                 "libobs.unmute": [],
                 "libobs.push-to-mute": [],
                 "libobs.push-to-talk": []
-            },
-            "deinterlace_mode": 0,
-            "deinterlace_field_order": 0,
-            "monitoring_type": 0,
-            "private_settings": {}
-        },
-        {
-            "prev_ver": 537001986,
-            "name": "背景 - JED午夜蓝动态",
-            "uuid": "75c6e9cd-937b-4805-9c4a-f6ccbede58fb",
-            "id": "ffmpeg_source",
-            "versioned_id": "ffmpeg_source",
-            "settings": {
-                "close_when_inactive": false,
-                "hw_decode": true,
-                "local_file": "{{VIDEO_ASSET_PATH}}",
-                "is_local_file": true,
-                "looping": true,
-                "clear_on_media_end": false,
-                "restart_on_activate": false,
-                "speed_percent": 100
-            },
-            "mixers": 255,
-            "sync": 0,
-            "flags": 0,
-            "volume": 1,
-            "balance": 0.5,
-            "enabled": true,
-            "muted": false,
-            "push-to-mute": false,
-            "push-to-mute-delay": 0,
-            "push-to-talk": false,
-            "push-to-talk-delay": 0,
-            "hotkeys": {
-                "libobs.mute": [],
-                "libobs.unmute": [],
-                "libobs.push-to-mute": [],
-                "libobs.push-to-talk": [],
-                "MediaSource.Restart": [],
-                "MediaSource.Play": [],
-                "MediaSource.Pause": [],
-                "MediaSource.Stop": []
             },
             "deinterlace_mode": 0,
             "deinterlace_field_order": 0,
@@ -802,7 +723,7 @@
             "id": "scene",
             "versioned_id": "scene",
             "settings": {
-                "id_counter": 20,
+                "id_counter": 22,
                 "custom_size": false,
                 "items": [
                     {
@@ -861,8 +782,8 @@
                         "private_settings": {}
                     },
                     {
-                        "name": "背景 - JED午夜蓝动态",
-                        "source_uuid": "75c6e9cd-937b-4805-9c4a-f6ccbede58fb",
+                        "name": "背景 · 深蓝工作室",
+                        "source_uuid": "8d059b8f-ee03-44cc-9a73-45ec11eaa036",
                         "visible": true,
                         "locked": true,
                         "rot": 0,
@@ -878,7 +799,62 @@
                         "crop_top": 0,
                         "crop_right": 0,
                         "crop_bottom": 0,
-                        "id": 20,
+                        "id": 21,
+                        "group_item_backup": false,
+                        "pos": {
+                            "x": 0,
+                            "y": 0
+                        },
+                        "pos_rel": {
+                            "x": -1.7777777910232544,
+                            "y": -1
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1
+                        },
+                        "scale_rel": {
+                            "x": 1,
+                            "y": 1
+                        },
+                        "bounds": {
+                            "x": 2560,
+                            "y": 1440
+                        },
+                        "bounds_rel": {
+                            "x": 3.555555582046509,
+                            "y": 2
+                        },
+                        "scale_filter": "disable",
+                        "blend_method": "default",
+                        "blend_type": "normal",
+                        "show_transition": {
+                            "duration": 0
+                        },
+                        "hide_transition": {
+                            "duration": 0
+                        },
+                        "private_settings": {}
+                    },
+                    {
+                        "name": "背景 · 暖纸桌面",
+                        "source_uuid": "25f4024e-f0da-40b2-83c2-d8292619b8e1",
+                        "visible": false,
+                        "locked": true,
+                        "rot": 0,
+                        "scale_ref": {
+                            "x": 2560,
+                            "y": 1440
+                        },
+                        "align": 5,
+                        "bounds_type": 1,
+                        "bounds_align": 5,
+                        "bounds_crop": false,
+                        "crop_left": 0,
+                        "crop_top": 0,
+                        "crop_right": 0,
+                        "crop_bottom": 0,
+                        "id": 22,
                         "group_item_backup": false,
                         "pos": {
                             "x": 0,
@@ -920,14 +896,14 @@
                         "source_uuid": "f6dcf03c-e54d-4507-b7aa-b6da7608b04d",
                         "visible": true,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
                         },
                         "align": 5,
                         "bounds_type": 2,
-                        "bounds_align": 5,
+                        "bounds_align": 0,
                         "bounds_crop": false,
                         "crop_left": 0,
                         "crop_top": 0,
@@ -936,28 +912,28 @@
                         "id": 19,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 48,
-                            "y": 90
+                            "x": 68.0,
+                            "y": 124.0
                         },
                         "pos_rel": {
-                            "x": -1.711111068725586,
-                            "y": -0.875
+                            "x": -1.6833333333333333,
+                            "y": -0.8277777777777777
                         },
                         "scale": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "scale_rel": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "bounds": {
-                            "x": 2240,
-                            "y": 1260
+                            "x": 2112.0,
+                            "y": 1188.0
                         },
                         "bounds_rel": {
-                            "x": 3.1111111640930176,
-                            "y": 1.75
+                            "x": 2.933333333333333,
+                            "y": 1.65
                         },
                         "scale_filter": "disable",
                         "blend_method": "default",
@@ -975,14 +951,14 @@
                         "source_uuid": "16a541b9-966e-4655-8914-c31e4deacec6",
                         "visible": false,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
                         },
                         "align": 5,
                         "bounds_type": 2,
-                        "bounds_align": 5,
+                        "bounds_align": 0,
                         "bounds_crop": false,
                         "crop_left": 0,
                         "crop_top": 0,
@@ -991,83 +967,28 @@
                         "id": 2,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 48,
-                            "y": 90
+                            "x": 68.0,
+                            "y": 124.0
                         },
                         "pos_rel": {
-                            "x": -1.711111068725586,
-                            "y": -0.875
+                            "x": -1.6833333333333333,
+                            "y": -0.8277777777777777
                         },
                         "scale": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "scale_rel": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "bounds": {
-                            "x": 2240,
-                            "y": 1260
+                            "x": 2112.0,
+                            "y": 1188.0
                         },
                         "bounds_rel": {
-                            "x": 3.1111111640930176,
-                            "y": 1.75
-                        },
-                        "scale_filter": "disable",
-                        "blend_method": "default",
-                        "blend_type": "normal",
-                        "show_transition": {
-                            "duration": 0
-                        },
-                        "hide_transition": {
-                            "duration": 0
-                        },
-                        "private_settings": {}
-                    },
-                    {
-                        "name": "JED 品牌签名",
-                        "source_uuid": "ffd017b4-89fd-489e-877d-84e320f2039c",
-                        "visible": true,
-                        "locked": true,
-                        "rot": 0,
-                        "scale_ref": {
-                            "x": 2560,
-                            "y": 1440
-                        },
-                        "align": 5,
-                        "bounds_type": 0,
-                        "bounds_align": 0,
-                        "bounds_crop": false,
-                        "crop_left": 0,
-                        "crop_top": 0,
-                        "crop_right": 0,
-                        "crop_bottom": 0,
-                        "id": 11,
-                        "group_item_backup": false,
-                        "pos": {
-                            "x": 72,
-                            "y": 1368
-                        },
-                        "pos_rel": {
-                            "x": -1.6777777671813965,
-                            "y": 0.8999999761581421
-                        },
-                        "scale": {
-                            "x": 1,
-                            "y": 1
-                        },
-                        "scale_rel": {
-                            "x": 1,
-                            "y": 1
-                        },
-                        "bounds": {
-                            "x": 0,
-                            "y": 0
-                        },
-                        "bounds_rel": {
-                            "x": 0,
-                            "y": 0
+                            "x": 2.933333333333333,
+                            "y": 1.65
                         },
                         "scale_filter": "disable",
                         "blend_method": "default",
@@ -1085,7 +1006,7 @@
                         "source_uuid": "0cb77099-cbd2-4575-8fd4-6c25ef7ee637",
                         "visible": true,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
@@ -1101,20 +1022,20 @@
                         "id": 17,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 2000,
-                            "y": 860
+                            "x": 2080.0,
+                            "y": 884.0
                         },
                         "pos_rel": {
-                            "x": 1,
-                            "y": 0.1944444179534912
+                            "x": 1.1111111111111112,
+                            "y": 0.22777777777777777
                         },
                         "scale": {
-                            "x": 0.5,
-                            "y": 0.5
+                            "x": 0.44,
+                            "y": 0.44
                         },
                         "scale_rel": {
-                            "x": 0.5,
-                            "y": 0.5
+                            "x": 0.44,
+                            "y": 0.44
                         },
                         "bounds": {
                             "x": 0,
@@ -1140,7 +1061,7 @@
                         "source_uuid": "9a904b41-22d6-4aad-852b-9df38c1d76f2",
                         "visible": true,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
@@ -1156,20 +1077,20 @@
                         "id": 18,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 1980,
-                            "y": 840
+                            "x": 2000.0,
+                            "y": 804.0
                         },
                         "pos_rel": {
-                            "x": 0.9722222089767456,
-                            "y": 0.16666662693023682
+                            "x": 1.0,
+                            "y": 0.11666666666666667
                         },
                         "scale": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "scale_rel": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "bounds": {
                             "x": 0,
@@ -1248,7 +1169,7 @@
                         "source_uuid": "16a541b9-966e-4655-8914-c31e4deacec6",
                         "visible": false,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
@@ -1264,28 +1185,28 @@
                         "id": 1,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 0,
-                            "y": 0
+                            "x": 0.0,
+                            "y": 0.0
                         },
                         "pos_rel": {
-                            "x": -1.7777777910232544,
-                            "y": -1
+                            "x": -1.7777777777777777,
+                            "y": -1.0
                         },
                         "scale": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "scale_rel": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "bounds": {
-                            "x": 2560,
-                            "y": 1440
+                            "x": 2560.0,
+                            "y": 1440.0
                         },
                         "bounds_rel": {
-                            "x": 3.555555582046509,
-                            "y": 2
+                            "x": 3.5555555555555554,
+                            "y": 2.0
                         },
                         "scale_filter": "disable",
                         "blend_method": "default",
@@ -1358,14 +1279,14 @@
                         "source_uuid": "f6dcf03c-e54d-4507-b7aa-b6da7608b04d",
                         "visible": true,
                         "locked": true,
-                        "rot": 0,
+                        "rot": 0.0,
                         "scale_ref": {
                             "x": 2560,
                             "y": 1440
                         },
                         "align": 5,
                         "bounds_type": 2,
-                        "bounds_align": 5,
+                        "bounds_align": 0,
                         "bounds_crop": false,
                         "crop_left": 0,
                         "crop_top": 0,
@@ -1374,28 +1295,28 @@
                         "id": 8,
                         "group_item_backup": false,
                         "pos": {
-                            "x": 0,
-                            "y": 0
+                            "x": 0.0,
+                            "y": 0.0
                         },
                         "pos_rel": {
-                            "x": -1.7777777910232544,
-                            "y": -1
+                            "x": -1.7777777777777777,
+                            "y": -1.0
                         },
                         "scale": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "scale_rel": {
-                            "x": 1,
-                            "y": 1
+                            "x": 1.0,
+                            "y": 1.0
                         },
                         "bounds": {
-                            "x": 2560,
-                            "y": 1440
+                            "x": 2560.0,
+                            "y": 1440.0
                         },
                         "bounds_rel": {
-                            "x": 3.555555582046509,
-                            "y": 2
+                            "x": 3.5555555555555554,
+                            "y": 2.0
                         },
                         "scale_filter": "disable",
                         "blend_method": "default",
@@ -1617,6 +1538,90 @@
                     "private_settings": {}
                 }
             ]
+        },
+        {
+            "prev_ver": 537001986,
+            "name": "背景 · 深蓝工作室",
+            "uuid": "8d059b8f-ee03-44cc-9a73-45ec11eaa036",
+            "id": "ffmpeg_source",
+            "versioned_id": "ffmpeg_source",
+            "settings": {
+                "close_when_inactive": false,
+                "hw_decode": true,
+                "local_file": "{{SLATE_VIDEO_PATH}}",
+                "is_local_file": true,
+                "looping": true,
+                "clear_on_media_end": false,
+                "restart_on_activate": false,
+                "speed_percent": 100
+            },
+            "mixers": 255,
+            "sync": 0,
+            "flags": 0,
+            "volume": 1,
+            "balance": 0.5,
+            "enabled": true,
+            "muted": false,
+            "push-to-mute": false,
+            "push-to-mute-delay": 0,
+            "push-to-talk": false,
+            "push-to-talk-delay": 0,
+            "hotkeys": {
+                "libobs.mute": [],
+                "libobs.unmute": [],
+                "libobs.push-to-mute": [],
+                "libobs.push-to-talk": [],
+                "MediaSource.Restart": [],
+                "MediaSource.Play": [],
+                "MediaSource.Pause": [],
+                "MediaSource.Stop": []
+            },
+            "deinterlace_mode": 0,
+            "deinterlace_field_order": 0,
+            "monitoring_type": 0,
+            "private_settings": {}
+        },
+        {
+            "prev_ver": 537001986,
+            "name": "背景 · 暖纸桌面",
+            "uuid": "25f4024e-f0da-40b2-83c2-d8292619b8e1",
+            "id": "ffmpeg_source",
+            "versioned_id": "ffmpeg_source",
+            "settings": {
+                "close_when_inactive": false,
+                "hw_decode": true,
+                "local_file": "{{PAPER_VIDEO_PATH}}",
+                "is_local_file": true,
+                "looping": true,
+                "clear_on_media_end": false,
+                "restart_on_activate": false,
+                "speed_percent": 100
+            },
+            "mixers": 255,
+            "sync": 0,
+            "flags": 0,
+            "volume": 1,
+            "balance": 0.5,
+            "enabled": true,
+            "muted": false,
+            "push-to-mute": false,
+            "push-to-mute-delay": 0,
+            "push-to-talk": false,
+            "push-to-talk-delay": 0,
+            "hotkeys": {
+                "libobs.mute": [],
+                "libobs.unmute": [],
+                "libobs.push-to-mute": [],
+                "libobs.push-to-talk": [],
+                "MediaSource.Restart": [],
+                "MediaSource.Play": [],
+                "MediaSource.Pause": [],
+                "MediaSource.Stop": []
+            },
+            "deinterlace_mode": 0,
+            "deinterlace_field_order": 0,
+            "monitoring_type": 0,
+            "private_settings": {}
         }
     ],
     "groups": [],

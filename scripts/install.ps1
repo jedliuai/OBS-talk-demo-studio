@@ -17,19 +17,19 @@ $backupRoot = Join-Path $obsRoot "OBS-talk-demo-studio-backups\$timestamp"
 $sceneSource = Join-Path $repoRoot 'obs\scene-collection\个人IP录制工作台.template.json'
 $profileSource = Join-Path $repoRoot 'obs\profile\basic.ini'
 $pluginSource = Join-Path $repoRoot 'obs\plugin-config\zoominator.json'
-$imageSource = Join-Path $repoRoot 'assets\jed-midnight-studio-clean.png'
-$videoSource = Join-Path $repoRoot 'assets\jed-midnight-studio-loop-v2.mp4'
+$slateSource = Join-Path $repoRoot 'assets\jed-slate-studio-loop.mp4'
+$paperSource = Join-Path $repoRoot 'assets\jed-paper-desk-loop.mp4'
 $maskSource = Join-Path $repoRoot 'assets\camera-circle-mask.png'
-$frameSource = Join-Path $repoRoot 'assets\camera-circle-frame-midnight.png'
+$frameSource = Join-Path $repoRoot 'assets\camera-ring-jed.png'
 
 $sceneTarget = Join-Path $obsRoot 'basic\scenes\个人IP录制工作台.json'
 $profileTarget = Join-Path $obsRoot 'basic\profiles\个人IP录制_1440p30\basic.ini'
 $pluginTarget = Join-Path $obsRoot 'plugin_config\zoominator\zoominator.json'
 $assetTargetRoot = Join-Path $obsRoot 'basic\assets\OBS-talk-demo-studio'
-$imageTarget = Join-Path $assetTargetRoot 'jed-midnight-studio-clean.png'
-$videoTarget = Join-Path $assetTargetRoot 'jed-midnight-studio-loop-v2.mp4'
+$slateTarget = Join-Path $assetTargetRoot 'jed-slate-studio-loop.mp4'
+$paperTarget = Join-Path $assetTargetRoot 'jed-paper-desk-loop.mp4'
 $maskTarget = Join-Path $assetTargetRoot 'camera-circle-mask.png'
-$frameTarget = Join-Path $assetTargetRoot 'camera-circle-frame-midnight.png'
+$frameTarget = Join-Path $assetTargetRoot 'camera-ring-jed.png'
 
 foreach ($target in @($sceneTarget, $profileTarget, $pluginTarget)) {
     if (Test-Path -LiteralPath $target) {
@@ -47,16 +47,18 @@ New-Item -ItemType Directory -Force -Path `
     $assetTargetRoot, `
     $RecordPath | Out-Null
 
-Copy-Item -LiteralPath $imageSource -Destination $imageTarget -Force
-Copy-Item -LiteralPath $videoSource -Destination $videoTarget -Force
+Copy-Item -LiteralPath $slateSource -Destination $slateTarget -Force
+Copy-Item -LiteralPath $paperSource -Destination $paperTarget -Force
 Copy-Item -LiteralPath $maskSource -Destination $maskTarget -Force
 Copy-Item -LiteralPath $frameSource -Destination $frameTarget -Force
 
-$videoJsonPath = $videoTarget.Replace('\', '\\')
+$slateJsonPath = $slateTarget.Replace('\', '\\')
+$paperJsonPath = $paperTarget.Replace('\', '\\')
 $maskJsonPath = $maskTarget.Replace('\', '\\')
 $frameJsonPath = $frameTarget.Replace('\', '\\')
 $sceneText = [IO.File]::ReadAllText($sceneSource)
-$sceneText = $sceneText.Replace('{{VIDEO_ASSET_PATH}}', $videoJsonPath)
+$sceneText = $sceneText.Replace('{{SLATE_VIDEO_PATH}}', $slateJsonPath)
+$sceneText = $sceneText.Replace('{{PAPER_VIDEO_PATH}}', $paperJsonPath)
 $sceneText = $sceneText.Replace('{{MASK_ASSET_PATH}}', $maskJsonPath)
 $sceneText = $sceneText.Replace('{{FRAME_ASSET_PATH}}', $frameJsonPath)
 [IO.File]::WriteAllText($sceneTarget, $sceneText, [Text.UTF8Encoding]::new($false))
